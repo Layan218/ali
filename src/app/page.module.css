@@ -1,141 +1,125 @@
-.page {
-  --background: #fafafa;
-  --foreground: #fff;
-
-  --text-primary: #000;
-  --text-secondary: #666;
-
-  --button-primary-hover: #383838;
-  --button-secondary-hover: #f2f2f2;
-  --button-secondary-border: #ebebeb;
-
+/* Homepage hero aligned to a clean, Google Slides-like layout */
+.hero {
   display: flex;
-  min-height: 100vh;
   align-items: center;
   justify-content: center;
-  font-family: var(--font-geist-sans);
-  background-color: var(--background);
-}
-
-.main {
-  display: flex;
   min-height: 100vh;
+  padding: 96px 24px;
+  background: transparent;
+}
+
+.centered {
+  max-width: 880px;
   width: 100%;
-  max-width: 800px;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: space-between;
-  background-color: var(--foreground);
-  padding: 120px 60px;
+  text-align: center;
 }
 
-.intro {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  text-align: left;
-  gap: 24px;
+.title {
+  font-size: 64px;
+  line-height: 1.1;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #111827; /* near-black for strong contrast */
 }
 
-.intro h1 {
-  max-width: 320px;
-  font-size: 40px;
-  font-weight: 600;
-  line-height: 48px;
-  letter-spacing: -2.4px;
-  text-wrap: balance;
-  color: var(--text-primary);
-}
-
-.intro p {
-  max-width: 440px;
+.description {
+  margin: 16px auto 0 auto;
+  max-width: 720px;
   font-size: 18px;
-  line-height: 32px;
-  text-wrap: balance;
-  color: var(--text-secondary);
-}
-
-.intro a {
+  line-height: 28px;
+  color: #6b7280; /* muted */
+  font-family: "Calibri", Calibri, "Segoe UI", Arial, sans-serif;
   font-weight: 500;
-  color: var(--text-primary);
 }
 
-.ctas {
-  display: flex;
-  flex-direction: row;
-  width: 100%;
-  max-width: 440px;
-  gap: 16px;
-  font-size: 14px;
+.actions {
+  display: inline-flex;
+  gap: 12px;
+  margin-top: 24px;
 }
 
-.ctas a {
-  display: flex;
-  justify-content: center;
+.primary {
+  display: inline-flex;
   align-items: center;
-  height: 40px;
-  padding: 0 16px;
-  border-radius: 128px;
-  border: 1px solid transparent;
-  transition: 0.2s;
-  cursor: pointer;
-  width: fit-content;
-  font-weight: 500;
+  justify-content: center;
+  height: 44px;
+  padding: 0 18px;
+  border-radius: 9999px;
+  background: #56c1b0;
+  color: #ffffff;
+  font-weight: 700;
+  border: 1px solid #56c1b0;
+  transition: filter .15s ease, box-shadow .15s ease;
 }
 
-a.primary {
-  background: var(--text-primary);
-  color: var(--background);
-  gap: 8px;
+.primary:hover {
+  filter: brightness(0.95);
 }
 
-a.secondary {
-  border-color: var(--button-secondary-border);
+.secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 44px;
+  padding: 0 18px;
+  border-radius: 9999px;
+  background: #ffffff;
+  color: #56c1b0;
+  font-weight: 700;
+  border: 1px solid #56c1b0;
+  transition: background-color .15s ease;
 }
 
-/* Enable hover only on non-touch devices */
-@media (hover: hover) and (pointer: fine) {
-  a.primary:hover {
-    background: var(--button-primary-hover);
-    border-color: transparent;
-  }
-
-  a.secondary:hover {
-    background: var(--button-secondary-hover);
-    border-color: transparent;
-  }
+.secondary:hover {
+  background: rgba(79, 70, 229, 0.06);
 }
 
-@media (max-width: 600px) {
-  .main {
-    padding: 48px 24px;
+@media (max-width: 640px) {
+  .title {
+    font-size: 40px;
   }
 
-  .intro {
-    gap: 16px;
-  }
-
-  .intro h1 {
-    font-size: 32px;
-    line-height: 40px;
-    letter-spacing: -1.92px;
+  .description {
+    font-size: 16px;
+    line-height: 26px;
   }
 }
 
-@media (prefers-color-scheme: dark) {
-  .logo {
-    filter: invert();
-  }
+/* Full-width wave image section */
+.waveContainer {
+  width: 100%;
+  background: #ffffff;
+}
 
-  .page {
-    --background: #000;
-    --foreground: #000;
+.wave {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+  object-position: center;
+}
 
-    --text-primary: #ededed;
-    --text-secondary: #999;
+/* Top-left logo */
+.logoWrap {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  z-index: 50;
+}
 
-    --button-primary-hover: #ccc;
-    --button-secondary-hover: #1a1a1a;
-    --button-secondary-border: #1a1a1a;
-  }
+.logo {
+  display: block;
+  height: auto;
+  /* Professional, responsive width */
+  width: clamp(120px, 18vw, 200px);
+}
+
+/* Top-right actions */
+.topRightActions {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 50;
+  display: inline-flex;
+  gap: 12px;
 }

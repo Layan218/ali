@@ -28,6 +28,14 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Site background image */
+body {
+  background-image: url('/opi.jpeg');
+  background-repeat: no-repeat;
+  background-position: center center;
+  background-size: cover;
+}
+
 /* Reusable utility styles for the landing page */
 .container {
   width: 100%;
