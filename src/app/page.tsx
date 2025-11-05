@@ -12,7 +12,7 @@ export default function Home() {
       </div>
       <main className={styles.hero}>
         <div className={styles.centered}>
-          <h1 className={styles.title}>Work Presentation</h1>
+          <h1 className={styles.title} style={{ fontFamily: "Calibri, Arial, Helvetica, sans-serif" }}>Secure Presentation Tool</h1>
           <p className={styles.description}>
             You can create and present professional presentations directly in your browser, from anywhere, with no installation required — exclusively for Aramco Digital.
           </p>
@@ -22,9 +22,12 @@ export default function Home() {
           </div>
         </div>
       </main>
-      <div className={styles.waveContainer}>
-        <img src="/rr.jpeg" alt="Decorative wave" className={styles.wave} />
+      <div className={styles.waveContainer} style={{ marginTop: 80 }}>
+        <img src="/curve-wave-seamless-pattern-thin-260nw-2293479067.jpg-removebg-preview.png" alt="Decorative wave" className={styles.wave} />
       </div>
+      <footer style={{ background: "#ffffff", color: "#555555", textAlign: "center", padding: 16, fontFamily: "Calibri, Arial, Helvetica, sans-serif" }}>
+        © 2025 Aramco Digital - Secure Presentation Tool
+      </footer>
     </>
   );
 }
