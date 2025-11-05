@@ -72,20 +72,13 @@ export default function LoginPage() {
       >
         <div style={{ display: "grid", placeItems: "center", gap: 8, marginBottom: 16 }}>
           <Image
-            src="/rt.jpeg"
+            src="/rt-removebg-preview.png"
             alt="Aramco Digital"
-            width={160}
-            height={64}
-            style={{
-              height: "auto",
-              width: "auto",
-              maxWidth: "100%",
-              mixBlendMode: "multiply", // visually blends white background away on light themes
-              display: "block",
-            }}
+            width={150}
+            height={60}
+            style={{ height: "auto", display: "block" }}
           />
         </div>
-
         <h1 style={{ fontSize: 28, fontWeight: 800, marginBottom: 8 }}>Login</h1>
         <p style={{ color: "var(--muted)", marginBottom: 20 }}>
           Use your <strong>@aramcodigital.com</strong> email to continue.
@@ -159,6 +152,23 @@ export default function LoginPage() {
           </button>
         </form>
       </div>
+      <footer
+        style={{
+          position: "fixed",
+          left: 0,
+          right: 0,
+          bottom: 0,
+          width: "100%",
+          background: "#eeeeee",
+          color: "#333",
+          textAlign: "center",
+          padding: 12,
+          fontFamily: "Calibri, Arial, Helvetica, sans-serif",
+          fontSize: 14,
+        }}
+      >
+        © 2025 Aramco Digital. All rights reserved.
+      </footer>
     </div>
   );
 }
