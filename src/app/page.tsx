@@ -8,7 +8,7 @@ export default function Home() {
       </div>
       <div className={styles.topRightActions}>
         <a className={styles.primary} href="#">Try Work Presentation</a>
-        <a className={styles.secondary} href="#">Sign in</a>
+        <a className={styles.secondary} href="/login">Sign in</a>
       </div>
       <main className={styles.hero}>
         <div className={styles.centered}>
@@ -18,7 +18,7 @@ export default function Home() {
           </p>
           <div className={styles.actions}>
             <a className={styles.primary} href="#">Try Work Presentation</a>
-            <a className={styles.secondary} href="#">Sign in</a>
+            <a className={styles.secondary} href="/login">Sign in</a>
           </div>
         </div>
       </main>
