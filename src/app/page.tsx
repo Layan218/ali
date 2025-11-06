@@ -1,20 +1,111 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import styles from "./page.module.css";
 
 export default function Home() {
+  const [isDark, setIsDark] = useState(false);
+
+  useEffect(() => {
+    const saved = typeof window !== "undefined" ? localStorage.getItem("theme") : null;
+    const prefersDark = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const shouldDark = saved ? saved === "dark" : prefersDark;
+    setIsDark(shouldDark);
+    if (shouldDark) document.documentElement.classList.add("dark");
+  }, []);
+
+  useEffect(() => {
+    if (isDark) {
+      document.documentElement.classList.add("dark");
+      localStorage.setItem("theme", "dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+      localStorage.setItem("theme", "light");
+    }
+  }, [isDark]);
+
+  const toggleTheme = () => setIsDark((v) => !v);
+  const features = [
+    {
+      title: "Secure Login & Role Management",
+      description: "Login with @aramcodigital.com and control access for Viewer and Editor roles.",
+    },
+    {
+      title: "Slide Editor (Basic)",
+      description: "Create and edit slides with titles, text, images, and basic formatting.",
+    },
+    {
+      title: "Secure Database Storage",
+      description: "Store presentations safely in a private internal database.",
+    },
+    {
+      title: "Basic Encryption",
+      description: "Encrypt data before saving to protect sensitive content.",
+    },
+    {
+      title: "Audit Log System",
+      description: "Track who viewed or edited each presentation and when.",
+    },
+    {
+      title: "Internal Comments",
+      description: "Add comments and feedback inside the system for team collaboration.",
+    },
+    {
+      title: "Presentation Mode (Viewer)",
+      description: "Present slides in a clean full-screen viewer with next/previous controls.",
+    },
+    {
+      title: "Live Team Chat",
+      description: "Communicate instantly with your team while editing presentations in real time.",
+    },
+    {
+      title: "Version History & Restore",
+      description: "View previous versions of your presentation and easily restore older edits.",
+    },
+  ];
+
   return (
     <>
-      <div className={styles.logoWrap}>
-        <img src="/aramco-digital.png" alt="Aramco Digital" className={styles.logo} />
-      </div>
-      <div className={styles.topRightActions}>
-        <a className={styles.primary} href="#">Try Work Presentation</a>
-        <a className={styles.secondary} href="/login">Sign in</a>
-      </div>
+      {/* Top Navigation */}
+      <nav className={styles.nav}>
+        <div className={styles.logoWrap}>
+          <img src="/aramco-digital.png" alt="Aramco Digital" className={styles.logo} />
+        </div>
+        <div className={styles.navLinks}>
+          <a href="#features" className={styles.navLink}>Features</a>
+          <a href="#security" className={styles.navLink}>Security</a>
+        </div>
+        <div className={styles.topRightActions}>
+          <button
+            type="button"
+            aria-label="Toggle dark mode"
+            onClick={toggleTheme}
+            className={styles.themeToggle}
+          >
+            {isDark ? (
+              // Sun icon for Dark Mode (switch to Light)
+              <svg className={`${styles.icon} ${styles.iconSpin}`} width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 18a6 6 0 1 0 0-12 6 6 0 0 0 0 12Z" stroke="currentColor" strokeWidth="1.8"/>
+                <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+              </svg>
+            ) : (
+              // Moon icon for Light Mode (switch to Dark)
+              <svg className={`${styles.icon} ${styles.iconSpin}`} width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" stroke="currentColor" strokeWidth="1.8" fill="none"/>
+              </svg>
+            )}
+          </button>
+          <a className={styles.primary} href="#">Try Work Presentation</a>
+          <a className={styles.secondary} href="/login">Sign in</a>
+        </div>
+      </nav>
+
+      {/* Hero Section */}
       <main className={styles.hero}>
         <div className={styles.centered}>
-          <h1 className={styles.title} style={{ fontFamily: "Calibri, Arial, Helvetica, sans-serif" }}>Secure Presentation Tool</h1>
+          <h1 className={styles.title}>Secure Presentation Tool</h1>
           <p className={styles.description}>
-            You can create and present professional presentations directly in your browser, from anywhere, with no installation required — exclusively for Aramco Digital.
+            You can create and present secure, professional presentations directly in your browser — exclusively for Aramco Digital.
           </p>
           <div className={styles.actions}>
             <a className={styles.primary} href="#">Try Work Presentation</a>
@@ -22,10 +113,24 @@ export default function Home() {
           </div>
         </div>
       </main>
-      <div className={styles.waveContainer} style={{ marginTop: 80 }}>
-        <img src="/curve-wave-seamless-pattern-thin-260nw-2293479067.jpg-removebg-preview.png" alt="Decorative wave" className={styles.wave} />
-      </div>
-      <footer style={{ background: "#ffffff", color: "#555555", textAlign: "center", padding: 16, fontFamily: "Calibri, Arial, Helvetica, sans-serif" }}>
+
+      {/* Features Section */}
+      <section id="features" className={styles.features}>
+        <div className={styles.featuresContainer}>
+          <h2 className={styles.featuresTitle}>Features</h2>
+          <div className={styles.featuresGrid}>
+            {features.map((feature, index) => (
+              <div key={index} className={styles.featureCard}>
+                <h3 className={styles.featureCardTitle}>{feature.title}</h3>
+                <p className={styles.featureCardDescription}>{feature.description}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className={styles.footer}>
         © 2025 Aramco Digital - Secure Presentation Tool
       </footer>
     </>
