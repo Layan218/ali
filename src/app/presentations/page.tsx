@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import styles from "./slides.module.css";
+import { useRouter } from "next/navigation";
+import TeamChatWidget from "@/components/TeamChatWidget";
+import styles from "./presentations.module.css";
 
 type TemplateCard = {
   id: string;
   title: string;
-  subtitle?: string;
   accent: string;
 };
 
@@ -20,24 +21,23 @@ type RecentPresentation = {
 };
 
 const templates: TemplateCard[] = [
-  { id: "blank", title: "Blank presentation", accent: "var(--accent-orange)" },
-  { id: "idea", title: "Your big idea", subtitle: "by Made to Stick", accent: "var(--accent-red)" },
-  { id: "album", title: "Photo album", accent: "var(--accent-sky)" },
-  { id: "wedding", title: "Wedding", accent: "var(--accent-lilac)" },
-  { id: "portfolio", title: "Portfolio", accent: "var(--accent-slate)" },
-  { id: "lookbook", title: "Lookbook", accent: "var(--accent-green)" },
+  { id: "template-blank", title: "Blank presentation", accent: "var(--accent-orange)" },
+  { id: "template-team-update", title: "Team update", accent: "var(--accent-red)" },
+  { id: "template-project-review", title: "Project review", accent: "var(--accent-sky)" },
+  { id: "template-training", title: "Training deck", accent: "var(--accent-lilac)" },
+  { id: "template-executive", title: "Executive summary", accent: "var(--accent-slate)" },
 ];
 
 const recents: RecentPresentation[] = [
   {
-    id: "deep-learning",
+    id: "presentation-deep-learning",
     title: "Lab Manual: Introduction to Deep Learning",
     date: "18 Jun 2025",
     thumbAccent: "linear-gradient(135deg, #79c7d9, #e1f3fb)",
     type: "P",
   },
   {
-    id: "dbms",
+    id: "presentation-dbms",
     title: "Advanced Coding & Databases for AI & Data Science",
     date: "15 Dec 2024",
     thumbAccent: "linear-gradient(135deg, #76d6b4, #e9f7f0)",
@@ -45,7 +45,7 @@ const recents: RecentPresentation[] = [
     type: "G",
   },
   {
-    id: "ai-marketing",
+    id: "presentation-ai-marketing",
     title: "AI in Marketing Presentation",
     date: "Opened 4 Oct 2024",
     thumbAccent: "linear-gradient(135deg, #7f96ff, #e2e7ff)",
@@ -53,15 +53,14 @@ const recents: RecentPresentation[] = [
   },
 ];
 
-export default function SlidesHome() {
+export default function PresentationsHome() {
+  const router = useRouter();
   const [isDark, setIsDark] = useState(false);
 
   useEffect(() => {
     const saved = typeof window !== "undefined" ? localStorage.getItem("theme") : null;
     const prefersDark =
-      typeof window !== "undefined" &&
-      window.matchMedia &&
-      window.matchMedia("(prefers-color-scheme: dark)").matches;
+      typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
     const shouldDark = saved ? saved === "dark" : prefersDark;
     setIsDark(shouldDark);
     if (shouldDark) document.documentElement.classList.add("dark");
@@ -79,16 +78,19 @@ export default function SlidesHome() {
 
   const toggleTheme = () => setIsDark((value) => !value);
 
+  const goToPresentation = (presentationId: string) => {
+    router.push(`/dashboard?presentationId=${encodeURIComponent(presentationId)}`);
+  };
+
   return (
     <>
-      {/* Top Navigation - Same as Home page */}
       <nav className={styles.nav}>
         <div className={styles.logoWrap}>
           <img src="/aramco-digital.png" alt="Aramco Digital" className={styles.logo} />
         </div>
         <div className={styles.navLinks}>
-          <a href="#features" className={styles.navLink}>Features</a>
-          <a href="#security" className={styles.navLink}>Security</a>
+          <button type="button" className={styles.navLink} onClick={() => router.push("/#features")}>Features</button>
+          <button type="button" className={styles.navLink} onClick={() => router.push("/#security")}>Security</button>
         </div>
         <div className={styles.topRightActions}>
           <button
@@ -99,45 +101,52 @@ export default function SlidesHome() {
           >
             {isDark ? (
               <svg className={`${styles.icon} ${styles.iconSpin}`} width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 18a6 6 0 1 0 0-12 6 6 0 0 0 0 12Z" stroke="currentColor" strokeWidth="1.8"/>
-                <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+                <path d="M12 18a6 6 0 1 0 0-12 6 6 0 0 0 0 12Z" stroke="currentColor" strokeWidth="1.8" />
+                <path
+                  d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                />
               </svg>
             ) : (
               <svg className={`${styles.icon} ${styles.iconSpin}`} width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" stroke="currentColor" strokeWidth="1.8" fill="none"/>
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" stroke="currentColor" strokeWidth="1.8" fill="none" />
               </svg>
             )}
           </button>
-          <a className={styles.primary} href="#">Try Work Presentation</a>
-          <a className={styles.secondary} href="/login">Sign in</a>
+          <button type="button" className={styles.primary} onClick={() => router.push("/login")}>
+            Try Work Presentation
+          </button>
+          <button type="button" className={styles.secondary} onClick={() => router.push("/login")}>
+            Sign in
+          </button>
         </div>
       </nav>
 
       <div className={styles.page}>
         <header className={styles.headerBar}>
-          <h1 className={styles.heading}>Slides</h1>
+          <h1 className={styles.heading}>Secure Presentations</h1>
           <div className={styles.searchWrap}>
-            <input className={styles.searchInput} placeholder="Search presentations" aria-label="Search presentations" />
+            <input className={styles.searchInput} placeholder="Search presentations…" aria-label="Search presentations" />
           </div>
-          <button className={styles.newButton} type="button">Start new</button>
+          <button className={styles.newButton} type="button" onClick={() => goToPresentation("new-presentation")}>Start new</button>
         </header>
 
         <main className={styles.content}>
           <section className={styles.templatesSection}>
             <div className={styles.sectionHeader}>
               <h2>Start a new presentation</h2>
-              <button className={styles.templateGallery} type="button">Template gallery ▾</button>
             </div>
             <div className={styles.templateRow}>
               {templates.map((template) => (
-                <article key={template.id} className={styles.templateCard}>
-                  <div
-                    className={styles.templateThumb}
-                    style={{ background: template.accent }}
-                    aria-hidden
-                  />
+                <article
+                  key={template.id}
+                  className={styles.templateCard}
+                  onClick={() => goToPresentation(template.id)}
+                >
+                  <div className={styles.templateThumb} style={{ background: template.accent }} aria-hidden />
                   <h3>{template.title}</h3>
-                  {template.subtitle ? <p>{template.subtitle}</p> : null}
                 </article>
               ))}
             </div>
@@ -146,19 +155,15 @@ export default function SlidesHome() {
           <section className={styles.recentsSection}>
             <div className={styles.recentsHeader}>
               <h2>Recent presentations</h2>
-              <div className={styles.recentsControls}>
-                <button className={styles.controlButton} type="button">Owned by anyone ▾</button>
-                <div className={styles.viewControls}>
-                  <button className={styles.iconButton} aria-label="Grid view" type="button">▦</button>
-                  <button className={styles.iconButton} aria-label="List view" type="button">☰</button>
-                  <button className={styles.iconButton} aria-label="Sort" type="button">A⋁</button>
-                </div>
-              </div>
             </div>
 
             <div className={styles.recentGrid}>
               {recents.map((item) => (
-                <article key={item.id} className={styles.recentCard}>
+                <article
+                  key={item.id}
+                  className={styles.recentCard}
+                  onClick={() => goToPresentation(item.id)}
+                >
                   <div className={styles.recentThumb} style={{ background: item.thumbAccent }}>
                     <span className={styles.fileBadge}>{item.type ?? "P"}</span>
                   </div>
@@ -167,20 +172,27 @@ export default function SlidesHome() {
                     <p>{item.date}</p>
                     {item.shared ? <span className={styles.sharedLabel}>Shared with you</span> : null}
                   </div>
-                  <button className={styles.cardMenu} type="button" aria-label="More actions">⋮</button>
+                  <button
+                    className={styles.cardMenu}
+                    type="button"
+                    aria-label="More actions"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      goToPresentation(item.id);
+                    }}
+                  >
+                    ⋮
+                  </button>
                 </article>
               ))}
             </div>
           </section>
         </main>
 
-        {/* Footer - Same as Home page */}
-        <footer className={styles.footer}>
-          © 2025 Aramco Digital - Secure Presentation Tool
-        </footer>
+        <TeamChatWidget />
+
+        <footer className={styles.footer}>© 2025 Aramco Digital - Secure Presentation Tool</footer>
       </div>
     </>
   );
 }
-
-

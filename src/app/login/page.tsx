@@ -2,13 +2,14 @@
 
 import Image from "next/image";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const router = useRouter();
   // Removed time display per request
 
   function isValidCompanyEmail(value: string) {
@@ -18,7 +19,6 @@ export default function LoginPage() {
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
-    setSuccess(null);
 
     if (!email || !password) {
       setError("Please enter both email and password.");
@@ -38,7 +38,7 @@ export default function LoginPage() {
     setIsSubmitting(true);
     try {
       await new Promise((r) => setTimeout(r, 500));
-      setSuccess("Login successful (demo).");
+      router.push("/presentations");
     } catch (err) {
       setError("Login failed. Please try again.");
     } finally {
@@ -127,9 +127,6 @@ export default function LoginPage() {
 
           {error ? (
             <div style={{ color: "#ef4444", fontSize: 14, textAlign: "center" }}>{error}</div>
-          ) : null}
-          {success ? (
-            <div style={{ color: "#22c55e", fontSize: 14, textAlign: "center" }}>{success}</div>
           ) : null}
 
           <button

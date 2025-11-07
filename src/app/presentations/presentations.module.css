@@ -1,4 +1,3 @@
-/* Navigation - Same as Home page */
 .nav {
   position: fixed;
   top: 0;
@@ -51,7 +50,6 @@
   gap: 12px;
 }
 
-/* Theme toggle button */
 .themeToggle {
   display: inline-flex;
   align-items: center;
@@ -61,9 +59,9 @@
   border-radius: 9999px;
   background: #ffffff;
   color: #333;
-  border: 1px solid rgba(0,0,0,0.1);
+  border: 1px solid rgba(0, 0, 0, 0.1);
   cursor: pointer;
-  transition: background-color .2s ease, box-shadow .2s ease, transform .2s ease;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 
 .themeToggle:hover {
@@ -74,7 +72,7 @@
 .icon {
   display: block;
   color: inherit;
-  transition: transform .35s ease, opacity .2s ease;
+  transition: transform 0.35s ease, opacity 0.2s ease;
 }
 
 .iconSpin {
@@ -125,28 +123,12 @@
   background: rgba(86, 193, 176, 0.08);
 }
 
-/* Dark theme base colors */
-:global(.dark) .nav {
-  background: #0f172a;
-  border-bottom-color: rgba(255,255,255,0.08);
-}
-
-:global(.dark) .navLink { color: #f8fafc; }
-:global(.dark) .navLink:hover { color: #e2e8f0; }
-
-:global(.dark) .themeToggle {
-  background: #0f172a;
-  color: #f8fafc;
-  border-color: rgba(255,255,255,0.15);
-}
-
-/* Page content */
 .page {
   min-height: 100vh;
   background: #ffffff;
   color: #202124;
   font-family: "Calibri", Calibri, "Segoe UI", Arial, sans-serif;
-  margin-top: 73px; /* Account for fixed nav */
+  margin-top: 73px;
   padding-top: 24px;
 }
 
@@ -163,7 +145,6 @@
 .heading {
   font-size: 28px;
   font-weight: 400;
-  font-family: "Calibri", Calibri, "Segoe UI", Arial, sans-serif;
   color: #202124;
 }
 
@@ -216,7 +197,8 @@
   margin: 0 auto;
 }
 
-.templatesSection {
+.templatesSection,
+.recentsSection {
   background: #ffffff;
   border-radius: 8px;
   padding: 32px;
@@ -224,7 +206,8 @@
   transition: box-shadow 0.2s ease;
 }
 
-.templatesSection:hover {
+.templatesSection:hover,
+.recentsSection:hover {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
 }
 
@@ -238,23 +221,7 @@
 .sectionHeader h2 {
   font-size: 20px;
   font-weight: 500;
-  font-family: "Calibri", Calibri, "Segoe UI", Arial, sans-serif;
   color: #202124;
-}
-
-.templateGallery {
-  border: none;
-  background: transparent;
-  color: #56c1b0;
-  font-weight: 500;
-  font-size: 14px;
-  cursor: pointer;
-  font-family: "Calibri", Calibri, "Segoe UI", Arial, sans-serif;
-  transition: color 0.15s ease;
-}
-
-.templateGallery:hover {
-  color: #4fb3a3;
 }
 
 .templateRow {
@@ -289,15 +256,7 @@
 .templateCard h3 {
   font-size: 14px;
   font-weight: 500;
-  font-family: "Calibri", Calibri, "Segoe UI", Arial, sans-serif;
   color: #202124;
-  margin: 0;
-}
-
-.templateCard p {
-  font-size: 12px;
-  color: #5f6368;
-  font-family: "Calibri", Calibri, "Segoe UI", Arial, sans-serif;
   margin: 0;
 }
 
@@ -306,11 +265,6 @@
   border-radius: 8px;
   padding: 32px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-  transition: box-shadow 0.2s ease;
-}
-
-.recentsSection:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
 }
 
 .recentsHeader {
@@ -323,52 +277,7 @@
 .recentsHeader h2 {
   font-size: 20px;
   font-weight: 500;
-  font-family: "Calibri", Calibri, "Segoe UI", Arial, sans-serif;
   color: #202124;
-}
-
-.recentsControls {
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.controlButton {
-  border: none;
-  background: rgba(0, 0, 0, 0.04);
-  padding: 8px 14px;
-  border-radius: 24px;
-  cursor: pointer;
-  font-family: "Calibri", Calibri, "Segoe UI", Arial, sans-serif;
-  font-size: 14px;
-  color: #5f6368;
-  transition: background 0.15s ease;
-}
-
-.controlButton:hover {
-  background: rgba(0, 0, 0, 0.08);
-}
-
-.viewControls {
-  display: inline-flex;
-  gap: 6px;
-}
-
-.iconButton {
-  width: 34px;
-  height: 34px;
-  border-radius: 8px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  background: #ffffff;
-  cursor: pointer;
-  font-size: 14px;
-  color: #5f6368;
-  transition: all 0.15s ease;
-}
-
-.iconButton:hover {
-  background: rgba(0, 0, 0, 0.04);
-  border-color: rgba(0, 0, 0, 0.12);
 }
 
 .recentGrid {
@@ -388,6 +297,7 @@
   background: #ffffff;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   transition: box-shadow 0.15s ease;
+  cursor: pointer;
 }
 
 .recentCard:hover {
@@ -416,13 +326,11 @@
   display: grid;
   place-items: center;
   font-weight: 700;
-  font-family: "Calibri", Calibri, "Segoe UI", Arial, sans-serif;
 }
 
 .recentMeta h3 {
   font-size: 14px;
   font-weight: 500;
-  font-family: "Calibri", Calibri, "Segoe UI", Arial, sans-serif;
   color: #202124;
   margin: 0 0 4px 0;
 }
@@ -430,7 +338,6 @@
 .recentMeta p {
   font-size: 12px;
   color: #5f6368;
-  font-family: "Calibri", Calibri, "Segoe UI", Arial, sans-serif;
   margin: 0;
 }
 
@@ -440,7 +347,6 @@
   font-size: 11px;
   font-weight: 600;
   color: #56c1b0;
-  font-family: "Calibri", Calibri, "Segoe UI", Arial, sans-serif;
 }
 
 .cardMenu {
@@ -458,16 +364,6 @@
   color: #202124;
 }
 
-:root {
-  --accent-orange: linear-gradient(135deg, #fbbc05, #fde3a7);
-  --accent-red: linear-gradient(135deg, #ea4335, #f6c1bb);
-  --accent-sky: linear-gradient(135deg, #5ab4f8, #bfe5ff);
-  --accent-lilac: linear-gradient(135deg, #c084fc, #e9d5ff);
-  --accent-slate: linear-gradient(135deg, #9aa5b1, #e2e8f0);
-  --accent-green: linear-gradient(135deg, #7ccba2, #e2f7ec);
-}
-
-/* Footer - Same as Home page */
 .footer {
   background: #ffffff;
   color: #5f6368;
@@ -478,89 +374,15 @@
   border-top: 1px solid rgba(0, 0, 0, 0.08);
 }
 
-/* Dark mode */
-:global(.dark) .page {
-  background: #0f172a;
-  color: #e2e8f0;
+:root {
+  --accent-orange: linear-gradient(135deg, #fbbc05, #fde3a7);
+  --accent-red: linear-gradient(135deg, #ea4335, #f6c1bb);
+  --accent-sky: linear-gradient(135deg, #5ab4f8, #bfe5ff);
+  --accent-lilac: linear-gradient(135deg, #c084fc, #e9d5ff);
+  --accent-slate: linear-gradient(135deg, #9aa5b1, #e2e8f0);
+  --accent-green: linear-gradient(135deg, #7ccba2, #e2f7ec);
 }
 
-:global(.dark) .heading {
-  color: #f8fafc;
-}
-
-:global(.dark) .searchInput {
-  background: rgba(17, 24, 39, 0.85);
-  border-color: rgba(148, 163, 184, 0.3);
-  color: #f8fafc;
-}
-
-:global(.dark) .newButton {
-  background: #56c1b0;
-}
-
-:global(.dark) .templatesSection,
-:global(.dark) .recentsSection {
-  background: #1e293b;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
-}
-
-:global(.dark) .templateCard,
-:global(.dark) .recentCard {
-  background: #1e293b;
-  border-color: rgba(148, 163, 184, 0.25);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
-}
-
-:global(.dark) .sectionHeader h2,
-:global(.dark) .recentsHeader h2 {
-  color: #f8fafc;
-}
-
-:global(.dark) .templateCard h3,
-:global(.dark) .recentMeta h3 {
-  color: #f8fafc;
-}
-
-:global(.dark) .templateCard p,
-:global(.dark) .recentMeta p {
-  color: #e2e8f0;
-}
-
-:global(.dark) .controlButton,
-:global(.dark) .iconButton {
-  background: rgba(17, 24, 39, 0.75);
-  border-color: rgba(148, 163, 184, 0.2);
-  color: #e2e8f0;
-}
-
-:global(.dark) .controlButton:hover,
-:global(.dark) .iconButton:hover {
-  background: rgba(17, 24, 39, 0.9);
-}
-
-:global(.dark) .templateGallery {
-  color: #56c1b0;
-}
-
-:global(.dark) .sharedLabel {
-  color: #56c1b0;
-}
-
-:global(.dark) .cardMenu {
-  color: #94a3b8;
-}
-
-:global(.dark) .cardMenu:hover {
-  color: #e2e8f0;
-}
-
-:global(.dark) .footer {
-  background: #0f172a;
-  color: #e5e7eb;
-  border-top-color: rgba(255,255,255,0.08);
-}
-
-/* Responsive Design */
 @media (max-width: 1024px) {
   .navLinks {
     margin-left: 24px;
@@ -620,4 +442,88 @@
   .recentGrid {
     grid-template-columns: 1fr;
   }
+}
+
+:global(.dark) .nav {
+  background: #0f172a;
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+:global(.dark) .navLink {
+  color: #f8fafc;
+}
+
+:global(.dark) .navLink:hover {
+  color: #e2e8f0;
+}
+
+:global(.dark) .themeToggle {
+  background: #0f172a;
+  color: #f8fafc;
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+:global(.dark) .page {
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+:global(.dark) .heading {
+  color: #f8fafc;
+}
+
+:global(.dark) .searchInput {
+  background: rgba(17, 24, 39, 0.85);
+  border-color: rgba(148, 163, 184, 0.3);
+  color: #f8fafc;
+}
+
+:global(.dark) .newButton {
+  background: #56c1b0;
+}
+
+:global(.dark) .templatesSection,
+:global(.dark) .recentsSection {
+  background: #1e293b;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+:global(.dark) .templateCard,
+:global(.dark) .recentCard {
+  background: #1e293b;
+  border-color: rgba(148, 163, 184, 0.25);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+:global(.dark) .sectionHeader h2,
+:global(.dark) .recentsHeader h2 {
+  color: #f8fafc;
+}
+
+:global(.dark) .templateCard h3,
+:global(.dark) .recentMeta h3 {
+  color: #f8fafc;
+}
+
+:global(.dark) .templateCard p,
+:global(.dark) .recentMeta p {
+  color: #e2e8f0;
+}
+
+:global(.dark) .sharedLabel {
+  color: #56c1b0;
+}
+
+:global(.dark) .cardMenu {
+  color: #94a3b8;
+}
+
+:global(.dark) .cardMenu:hover {
+  color: #e2e8f0;
+}
+
+:global(.dark) .footer {
+  background: #0f172a;
+  color: #e5e7eb;
+  border-top-color: rgba(255, 255, 255, 0.08);
 }

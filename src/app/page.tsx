@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import styles from "./page.module.css";
 
 export default function Home() {
+  const router = useRouter();
   const [isDark, setIsDark] = useState(false);
 
   useEffect(() => {
@@ -95,8 +97,20 @@ export default function Home() {
               </svg>
             )}
           </button>
-          <a className={styles.primary} href="#">Try Work Presentation</a>
-          <a className={styles.secondary} href="/login">Sign in</a>
+          <button
+            type="button"
+            className={styles.primary}
+            onClick={() => router.push("/login")}
+          >
+            Try Work Presentation
+          </button>
+          <button
+            type="button"
+            className={styles.secondary}
+            onClick={() => router.push("/login")}
+          >
+            Sign in
+          </button>
         </div>
       </nav>
 
@@ -108,8 +122,12 @@ export default function Home() {
             You can create and present secure, professional presentations directly in your browser — exclusively for Aramco Digital.
           </p>
           <div className={styles.actions}>
-            <a className={styles.primary} href="#">Try Work Presentation</a>
-            <a className={styles.secondary} href="/login">Sign in</a>
+            <button type="button" className={styles.primary} onClick={() => router.push("/login")}>
+              Try Work Presentation
+            </button>
+            <button type="button" className={styles.secondary} onClick={() => router.push("/login")}>
+              Sign in
+            </button>
           </div>
         </div>
       </main>
