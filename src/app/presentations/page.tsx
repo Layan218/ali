@@ -5,6 +5,15 @@ import { useRouter } from "next/navigation";
 import TeamChatWidget from "@/components/TeamChatWidget";
 import styles from "./presentations.module.css";
 
+type PresentationRecord = {
+  presentationId: string;
+  title: string;
+  owner: string;
+  lastUpdated: string;
+  status: "Draft" | "Final";
+  slides: Array<{ id: string; title: string; subtitle: string }>;
+};
+
 type TemplateCard = {
   id: string;
   title: string;
@@ -28,7 +37,7 @@ const templates: TemplateCard[] = [
   { id: "template-executive", title: "Executive summary", accent: "var(--accent-slate)" },
 ];
 
-const recents: RecentPresentation[] = [
+const defaultRecents: RecentPresentation[] = [
   {
     id: "presentation-deep-learning",
     title: "Lab Manual: Introduction to Deep Learning",
@@ -53,9 +62,12 @@ const recents: RecentPresentation[] = [
   },
 ];
 
+const STORAGE_KEY = "presentationsData";
+
 export default function PresentationsHome() {
   const router = useRouter();
   const [isDark, setIsDark] = useState(false);
+  const [recentCards, setRecentCards] = useState<RecentPresentation[]>(defaultRecents);
 
   useEffect(() => {
     const saved = typeof window !== "undefined" ? localStorage.getItem("theme") : null;
@@ -76,10 +88,99 @@ export default function PresentationsHome() {
     }
   }, [isDark]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw) as PresentationRecord[];
+      if (!Array.isArray(parsed)) return;
+      const mapped = parsed.map((presentation) => ({
+        id: presentation.presentationId,
+        title: presentation.title || "Untitled presentation",
+        date: new Date(presentation.lastUpdated).toLocaleDateString("en-GB", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+        }),
+        thumbAccent: "linear-gradient(135deg, #7ccba2, #e2f7ec)",
+        type: "P",
+      }));
+      setRecentCards((prev) => {
+        const existingIds = new Set(prev.map((item) => item.id));
+        const filtered = mapped.filter((item) => !existingIds.has(item.id));
+        return [...filtered, ...prev];
+      });
+    } catch (error) {
+      console.error("Failed to parse presentations from storage", error);
+    }
+  }, []);
+
   const toggleTheme = () => setIsDark((value) => !value);
 
   const goToPresentation = (presentationId: string) => {
-    router.push(`/dashboard?presentationId=${encodeURIComponent(presentationId)}`);
+    router.push(`/editor?presentationId=${encodeURIComponent(presentationId)}&slideId=slide-1`);
+  };
+
+  const handleBlankClick = () => {
+    const presentationId = `presentation-${Date.now()}`;
+    const now = new Date();
+    const newPresentation: PresentationRecord = {
+      presentationId,
+      title: "Untitled presentation",
+      owner: "Current User",
+      lastUpdated: now.toISOString(),
+      status: "Draft",
+      slides: [
+        {
+          id: "slide-1",
+          title: "Click to add title",
+          subtitle: "Click to add subtitle",
+        },
+      ],
+    };
+
+    if (typeof window !== "undefined") {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        const parsed = raw ? (JSON.parse(raw) as PresentationRecord[]) : [];
+        const nextData = Array.isArray(parsed) ? [...parsed, newPresentation] : [newPresentation];
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(nextData));
+      } catch (error) {
+        console.error("Failed to persist new presentation", error);
+      }
+    }
+
+    const displayDate = now.toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+
+    setRecentCards((prev) => [
+      {
+        id: presentationId,
+        title: newPresentation.title,
+        date: displayDate,
+        thumbAccent: "linear-gradient(135deg, #7ccba2, #e2f7ec)",
+        type: "P",
+      },
+      ...prev,
+    ]);
+
+    router.push(`/editor?presentationId=${encodeURIComponent(presentationId)}&slideId=slide-1`);
+  };
+
+  const handleTeamUpdateClick = () => {
+    router.push("/audit-log");
+  };
+
+  const handleTrainingClick = () => {
+    router.push("/training-deck");
+  };
+
+  const handleExecutiveSummaryClick = () => {
+    router.push("/executive-summary");
   };
 
   return (
@@ -130,7 +231,9 @@ export default function PresentationsHome() {
           <div className={styles.searchWrap}>
             <input className={styles.searchInput} placeholder="Search presentations…" aria-label="Search presentations" />
           </div>
-          <button className={styles.newButton} type="button" onClick={() => goToPresentation("new-presentation")}>Start new</button>
+          <button className={styles.newButton} type="button" onClick={() => goToPresentation("new-presentation")}>
+            Start new
+          </button>
         </header>
 
         <main className={styles.content}>
@@ -143,7 +246,17 @@ export default function PresentationsHome() {
                 <article
                   key={template.id}
                   className={styles.templateCard}
-                  onClick={() => goToPresentation(template.id)}
+                  onClick={
+                    template.id === "template-blank"
+                      ? handleBlankClick
+                      : template.id === "template-team-update"
+                      ? handleTeamUpdateClick
+                      : template.id === "template-training"
+                      ? handleTrainingClick
+                      : template.id === "template-executive"
+                      ? handleExecutiveSummaryClick
+                      : () => goToPresentation(template.id)
+                  }
                 >
                   <div className={styles.templateThumb} style={{ background: template.accent }} aria-hidden />
                   <h3>{template.title}</h3>
@@ -158,7 +271,7 @@ export default function PresentationsHome() {
             </div>
 
             <div className={styles.recentGrid}>
-              {recents.map((item) => (
+              {recentCards.map((item) => (
                 <article
                   key={item.id}
                   className={styles.recentCard}

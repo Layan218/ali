@@ -5,10 +5,18 @@ import type { CSSProperties, FormEvent } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import TeamChatWidget from "@/components/TeamChatWidget";
+<<<<<<< HEAD
+=======
+import { demoSlides } from "@/data/demoSlides";
+>>>>>>> origin/main
 import styles from "./editor.module.css";
 
 type SlideData = {
   id: string;
+<<<<<<< HEAD
+=======
+  presentationId: string;
+>>>>>>> origin/main
   title: string;
   subtitle: string;
   notes: string;
@@ -114,11 +122,29 @@ function formatTitleFromId(id: string) {
     .join(" ");
 }
 
+<<<<<<< HEAD
 const initialSlides: SlideData[] = [
   { id: "slide-1", title: "Click to add title", subtitle: "Click to add subtitle", notes: "" },
   { id: "slide-2", title: "Click to add title", subtitle: "Click to add subtitle", notes: "" },
   { id: "slide-3", title: "Click to add title", subtitle: "Click to add subtitle", notes: "" },
 ];
+=======
+const initialSlides: SlideData[] = demoSlides.map((slide) => ({
+  id: slide.id,
+  presentationId: slide.presentationId,
+  title: slide.title,
+  subtitle: slide.subtitle,
+  notes: "",
+}));
+
+const emptySlide: SlideData = {
+  id: "",
+  presentationId: "",
+  title: "",
+  subtitle: "",
+  notes: "",
+};
+>>>>>>> origin/main
 
 export default function EditorPage({ params }: { params: { id: string } }) {
   const router = useRouter();
@@ -128,13 +154,21 @@ export default function EditorPage({ params }: { params: { id: string } }) {
   const [isDark, setIsDark] = useState(false);
   const [presentationTitle, setPresentationTitle] = useState(() => formatTitleFromId(params.id));
   const [slides, setSlides] = useState<SlideData[]>(initialSlides);
+<<<<<<< HEAD
   const [selectedSlideId, setSelectedSlideId] = useState(initialSlides[0].id);
+=======
+  const [selectedSlideId, setSelectedSlideId] = useState(initialSlides[0]?.id ?? "");
+>>>>>>> origin/main
   const [isFinal, setIsFinal] = useState(false);
   const [activeField, setActiveField] = useState<FieldKey>("title");
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
   const [isHighlightPickerOpen, setIsHighlightPickerOpen] = useState(false);
   const [comments, setComments] = useState<CommentItem[]>(initialComments);
   const [newComment, setNewComment] = useState("");
+<<<<<<< HEAD
+=======
+  const [activeSlide, setActiveSlide] = useState<SlideData>(initialSlides[0] ?? emptySlide);
+>>>>>>> origin/main
 
   const colorButtonRef = useRef<HTMLDivElement | null>(null);
   const highlightButtonRef = useRef<HTMLDivElement | null>(null);
@@ -161,11 +195,16 @@ export default function EditorPage({ params }: { params: { id: string } }) {
     listType: "none" as "none" | "bullet" | "number",
   });
 
+<<<<<<< HEAD
   const selectedSlide = useMemo(
     () => slides.find((slide) => slide.id === selectedSlideId) ?? slides[0],
     [selectedSlideId, slides]
   );
   const currentSlideIndex = slides.findIndex((slide) => slide.id === selectedSlideId);
+=======
+  const selectedSlide = activeSlide;
+  const currentSlideIndex = slides.findIndex((slide) => slide.id === selectedSlide?.id);
+>>>>>>> origin/main
   const isFirstSlide = currentSlideIndex <= 0;
   const isLastSlide = currentSlideIndex === slides.length - 1;
   const canDeleteSlide = slides.length > 1;
@@ -214,6 +253,7 @@ export default function EditorPage({ params }: { params: { id: string } }) {
   }, [isHighlightPickerOpen]);
 
   useEffect(() => {
+<<<<<<< HEAD
     if (!selectedSlide) return;
     if (titleRef.current) {
       titleRef.current.innerHTML = selectedSlide.title || placeholderMap.title;
@@ -221,12 +261,25 @@ export default function EditorPage({ params }: { params: { id: string } }) {
     }
     if (subtitleRef.current) {
       subtitleRef.current.innerHTML = selectedSlide.subtitle || placeholderMap.subtitle;
+=======
+    if (!activeSlide) return;
+    if (titleRef.current) {
+      titleRef.current.innerHTML = activeSlide.title || placeholderMap.title;
+      titleRef.current.style.lineHeight = `${formatting.title.lineHeight}`;
+    }
+    if (subtitleRef.current) {
+      subtitleRef.current.innerHTML = activeSlide.subtitle || placeholderMap.subtitle;
+>>>>>>> origin/main
       subtitleRef.current.style.lineHeight = `${formatting.subtitle.lineHeight}`;
     }
     if (notesRef.current) {
       notesRef.current.style.lineHeight = `${formatting.notes.lineHeight}`;
     }
+<<<<<<< HEAD
   }, [selectedSlide, formatting.title.lineHeight, formatting.subtitle.lineHeight, formatting.notes.lineHeight]);
+=======
+  }, [activeSlide, formatting.title.lineHeight, formatting.subtitle.lineHeight, formatting.notes.lineHeight]);
+>>>>>>> origin/main
 
   useEffect(() => {
     const handleSelectionChange = () => {
@@ -254,6 +307,18 @@ export default function EditorPage({ params }: { params: { id: string } }) {
     return () => document.removeEventListener("selectionchange", handleSelectionChange);
   }, []);
 
+<<<<<<< HEAD
+=======
+  useEffect(() => {
+    const nextActive =
+      slides.find((slide) => slide.id === selectedSlideId) ?? slides[0] ?? emptySlide;
+
+    if (nextActive !== activeSlide) {
+      setActiveSlide(nextActive);
+    }
+  }, [slides, selectedSlideId, activeSlide]);
+
+>>>>>>> origin/main
   const isEditableField = activeField === "title" || activeField === "subtitle";
 
   const normalizeColor = (value: string | null): string => {
@@ -472,15 +537,28 @@ export default function EditorPage({ params }: { params: { id: string } }) {
   };
 
   const handleAddSlide = () => {
+<<<<<<< HEAD
+=======
+    const activePresentationId = presentationId ?? activeSlide.presentationId ?? "slide-ops-review";
+
+>>>>>>> origin/main
     setSlides((prev) => {
       const nextIndex = prev.length + 1;
       const newSlide: SlideData = {
         id: `slide-${nextIndex}-${Date.now()}`,
+<<<<<<< HEAD
+=======
+        presentationId: activePresentationId,
+>>>>>>> origin/main
         title: placeholderMap.title,
         subtitle: placeholderMap.subtitle,
         notes: "",
       };
       setSelectedSlideId(newSlide.id);
+<<<<<<< HEAD
+=======
+      setActiveSlide(newSlide);
+>>>>>>> origin/main
       return [...prev, newSlide];
     });
   };
@@ -504,10 +582,16 @@ export default function EditorPage({ params }: { params: { id: string } }) {
       }
       const nextSlides = prev.filter((slide) => slide.id !== selectedSlideId);
       const nextIndex = Math.max(0, Math.min(index, nextSlides.length - 1));
+<<<<<<< HEAD
       const nextSlide = nextSlides[nextIndex];
       if (nextSlide) {
         setSelectedSlideId(nextSlide.id);
       }
+=======
+      const nextSlide = nextSlides[nextIndex] ?? emptySlide;
+      setSelectedSlideId(nextSlide.id);
+      setActiveSlide(nextSlide);
+>>>>>>> origin/main
       return nextSlides;
     });
   };
@@ -575,8 +659,12 @@ export default function EditorPage({ params }: { params: { id: string } }) {
   });
 
   const handleOpenSlideshow = () => {
+<<<<<<< HEAD
     const fallbackId = slides[0]?.id ?? "";
     const targetId = selectedSlideId || fallbackId;
+=======
+    const targetId = activeSlide?.id || slides[0]?.id || "";
+>>>>>>> origin/main
     if (targetId) {
       const params = new URLSearchParams({ slideId: targetId });
       if (presentationId) params.set("presentationId", presentationId);
@@ -930,13 +1018,24 @@ export default function EditorPage({ params }: { params: { id: string } }) {
               <aside className={styles.slidesSidebar}>
                 <div className={styles.slideList}>
                   {slides.map((slide, index) => {
+<<<<<<< HEAD
                     const isActive = slide.id === selectedSlideId;
+=======
+                    const isActive = slide.id === activeSlide?.id;
+>>>>>>> origin/main
                     return (
                       <button
                         type="button"
                         key={slide.id}
                         className={`${styles.slideItem} ${isActive ? styles.slideItemActive : ""}`}
+<<<<<<< HEAD
                         onClick={() => setSelectedSlideId(slide.id)}
+=======
+                        onClick={() => {
+                          setSelectedSlideId(slide.id);
+                          setActiveSlide(slide);
+                        }}
+>>>>>>> origin/main
                       >
                         <span className={styles.slideNumber}>{index + 1}</span>
                         <div className={styles.slideThumb} aria-hidden />
@@ -962,7 +1061,13 @@ export default function EditorPage({ params }: { params: { id: string } }) {
                     onFocus={() => handleContentFocus("title")}
                     onBlur={() => handleContentBlur("title")}
                     style={getTextStyle("title")}
+<<<<<<< HEAD
                   />
+=======
+                  >
+                    {activeSlide?.title || placeholderMap.title}
+                  </div>
+>>>>>>> origin/main
                   <div
                     ref={subtitleRef}
                     className={styles.slideSubtitleInput}
@@ -974,7 +1079,13 @@ export default function EditorPage({ params }: { params: { id: string } }) {
                     onFocus={() => handleContentFocus("subtitle")}
                     onBlur={() => handleContentBlur("subtitle")}
                     style={getTextStyle("subtitle")}
+<<<<<<< HEAD
                   />
+=======
+                  >
+                    {activeSlide?.subtitle || placeholderMap.subtitle}
+                  </div>
+>>>>>>> origin/main
                 </div>
 
                 <div className={styles.slideActions}>
@@ -1033,7 +1144,11 @@ export default function EditorPage({ params }: { params: { id: string } }) {
                   <textarea
                     ref={notesRef}
                     className={styles.notesInput}
+<<<<<<< HEAD
                     value={selectedSlide?.notes ?? ""}
+=======
+                    value={activeSlide?.notes ?? ""}
+>>>>>>> origin/main
                     onChange={handleNotesChange}
                     onFocus={handleNotesFocus}
                     aria-label="Slide notes"

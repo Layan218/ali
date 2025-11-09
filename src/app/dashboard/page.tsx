@@ -260,9 +260,7 @@ export default function DashboardPage() {
                               className={styles.outlineButton}
                               onClick={(event) => {
                                 event.stopPropagation();
-                                const params = new URLSearchParams({ slideId: slide.id });
-                                if (presentationId) params.set("presentationId", presentationId);
-                                router.push(`/editor?${params.toString()}`);
+                                router.push("/editor?presentationId=slide-ops-review&slideId=slide-1");
                               }}
                             >
                               Edit
@@ -272,9 +270,7 @@ export default function DashboardPage() {
                               className={styles.ghostButton}
                               onClick={(event) => {
                                 event.stopPropagation();
-                                const params = new URLSearchParams({ slideId: slide.id });
-                                if (presentationId) params.set("presentationId", presentationId);
-                                router.push(`/viewer?${params.toString()}`);
+                                router.push("/viewer?presentationId=slide-ops-review&slideId=slide-1");
                               }}
                             >
                               Presentation Mode

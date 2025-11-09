@@ -66,6 +66,25 @@ export default function Home() {
     },
   ];
 
+  const securityHighlights = [
+    {
+      title: "Zero-Trust Access",
+      description: "Every session is authenticated with Aramco Digital SSO and scoped to least-privilege roles.",
+    },
+    {
+      title: "End-to-End Encryption",
+      description: "Slides, comments, and attachments are encrypted in transit and at rest using AES-256.",
+    },
+    {
+      title: "24/7 Monitoring",
+      description: "Security operations receive real-time alerts for anomalous access across all presentations.",
+    },
+    {
+      title: "Tamper-Proof Auditing",
+      description: "Immutable audit logs capture edits, views, and exports for regulatory compliance.",
+    },
+  ];
+
   return (
     <>
       {/* Top Navigation */}
@@ -141,6 +160,20 @@ export default function Home() {
               <div key={index} className={styles.featureCard}>
                 <h3 className={styles.featureCardTitle}>{feature.title}</h3>
                 <p className={styles.featureCardDescription}>{feature.description}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section id="security" className={styles.features}>
+        <div className={styles.featuresContainer}>
+          <h2 className={styles.featuresTitle}>Security</h2>
+          <div className={styles.featuresGrid}>
+            {securityHighlights.map((item, index) => (
+              <div key={item.title + index} className={styles.featureCard}>
+                <h3 className={styles.featureCardTitle}>{item.title}</h3>
+                <p className={styles.featureCardDescription}>{item.description}</p>
               </div>
             ))}
           </div>

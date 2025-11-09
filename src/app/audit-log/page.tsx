@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import TeamChatWidget from "@/components/TeamChatWidget";
 import styles from "./audit-log.module.css";
+import { useRouter } from "next/navigation";
 
 type LogEntry = {
   id: string;
@@ -17,100 +18,31 @@ type LogEntry = {
 const logEntries: LogEntry[] = [
   {
     id: "log-1",
-    timestamp: "22 Aug 2025 • 09:45",
-    user: "Layla Nassar",
-    action: "Edited slide title",
-    details: "Updated slide 3 title to “2026 Roadmap Highlights”.",
+    timestamp: "2025-06-17 12:30",
+    user: "reem.saad",
+    action: "Edited slide",
+    details: "Updated title for Q2 Strategy Briefing",
   },
   {
     id: "log-2",
-    timestamp: "22 Aug 2025 • 09:02",
-    user: "Omar Khalid",
-    action: "Viewed slideshow",
-    details: "Played “Executive Briefing” deck from the editor.",
+    timestamp: "2025-06-17 12:10",
+    user: "r.alqahtani",
+    action: "Viewed presentation",
+    details: "Opened in Presentation Mode",
   },
   {
     id: "log-3",
-    timestamp: "22 Aug 2025 • 08:58",
-    user: "Leila Al-Hassan",
-    action: "Created new presentation",
-    details: "Drafted “Q4 Stakeholder Summit” from the Strategy template.",
-  },
-  {
-    id: "log-4",
-    timestamp: "21 Aug 2025 • 17:12",
-    user: "Priya Singh",
-    action: "Added collaborator",
-    details: "Shared “AI Adoption Playbook” with maya.a@aramco.com.",
-  },
-  {
-    id: "log-5",
-    timestamp: "21 Aug 2025 • 16:41",
-    user: "Amir Al-Qahtani",
-    action: "Commented on slide",
-    details: "Left a note on slide 5: “Add the updated revenue chart here.”",
-  },
-  {
-    id: "log-6",
-    timestamp: "21 Aug 2025 • 15:33",
-    user: "Layla Nassar",
-    action: "Deleted slide",
-    details: "Removed duplicate slide 7 from “Board Strategy Deck”.",
-  },
-  {
-    id: "log-7",
-    timestamp: "21 Aug 2025 • 14:05",
-    user: "Omar Khalid",
-    action: "Restored previous version",
-    details: "Rolled back slide 2 in “Innovation Roadmap” to the morning revision.",
-  },
-  {
-    id: "log-8",
-    timestamp: "21 Aug 2025 • 11:22",
-    user: "Priya Singh",
-    action: "Exported presentation",
-    details: "Downloaded “Cybersecurity Awareness” as PDF for distribution.",
-  },
-  {
-    id: "log-9",
-    timestamp: "21 Aug 2025 • 10:47",
-    user: "Leila Al-Hassan",
-    action: "Updated access",
-    details: "Granted view-only access to it.support@aramco.com for “Incident Response Plan”.",
-  },
-  {
-    id: "log-10",
-    timestamp: "20 Aug 2025 • 19:15",
-    user: "Amir Al-Qahtani",
-    action: "Duplicated presentation",
-    details: "Copied “Operational Excellence 2025” to create “Ops Excellence – EMEA”.",
-  },
-  {
-    id: "log-11",
-    timestamp: "20 Aug 2025 • 18:02",
-    user: "Layla Nassar",
-    action: "Edited speaker notes",
-    details: "Refined closing remarks for slide 12 in “Investor Update”.",
-  },
-  {
-    id: "log-12",
-    timestamp: "20 Aug 2025 • 17:26",
-    user: "Omar Khalid",
-    action: "Applied new theme",
-    details: "Switched “Digital Transformation” deck to Aramco Dark theme.",
-  },
-  {
-    id: "log-13",
-    timestamp: "20 Aug 2025 • 16:58",
-    user: "Priya Singh",
-    action: "Published presentation",
-    details: "Made “Quarterly Ops Review” available to Leadership workspace.",
+    timestamp: "2025-06-17 11:45",
+    user: "l.fernandez",
+    action: "Commented",
+    details: "Added note on maintenance backlog",
   },
 ];
 
 export default function AuditLogPage() {
   const [isDark, setIsDark] = useState(false);
   const pathname = usePathname();
+  const router = useRouter();
 
   useEffect(() => {
     const saved = typeof window !== "undefined" ? localStorage.getItem("theme") : null;
@@ -197,9 +129,13 @@ export default function AuditLogPage() {
               </svg>
             )}
           </button>
-          <a className={styles.primary} href="/slides">
+          <button
+            type="button"
+            className={styles.primary}
+            onClick={() => router.push("/presentations")}
+          >
             Slides Home
-          </a>
+          </button>
           <a className={styles.secondary} href="/">
             Back to Home
           </a>

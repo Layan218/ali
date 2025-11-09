@@ -1,88 +1,57 @@
 'use client';
 
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { demoSlides } from "@/data/demoSlides";
 import styles from "./viewer.module.css";
 
-type Slide = {
-  id: string;
-  title: string;
-  content: string;
-  imageUrl?: string;
+type Slide = typeof demoSlides[number];
+
+const getSlidesForPresentation = (presentationId?: string | null): Slide[] => {
+  if (!presentationId) {
+    return demoSlides;
+  }
+  const filtered = demoSlides.filter((slide) => slide.presentationId === presentationId);
+  return filtered.length > 0 ? filtered : demoSlides;
 };
 
-const presentationTitle = "Q2 Strategy Briefing";
-
-const slides: Slide[] = [
-  {
-    id: "slide-1",
-    title: "Vision Alignment",
-    content: "Reinforce our commitment to resilient energy transition with a focus on secure digital enablement across the enterprise.",
-    imageUrl: "/slides/vision.png",
-  },
-  {
-    id: "slide-2",
-    title: "Key Metrics",
-    content: "• 18% increase in operational uptime\n• 12% reduction in cybersecurity incidents\n• 26 new digital wells onboarded this quarter",
-  },
-  {
-    id: "slide-3",
-    title: "Action Items",
-    content: "1. Finalize stakeholder workshops\n2. Launch digital twin pilot\n3. Prepare executive summary for Board review",
-    imageUrl: "/slides/action-items.png",
-  },
-];
+const findSlideIndex = (slides: Slide[], slideId?: string | null): number => {
+  if (!slideId) return 0;
+  const idx = slides.findIndex((slide) => slide.id === slideId);
+  return idx >= 0 ? idx : 0;
+};
 
 export default function ViewerPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const requestedSlideId = searchParams.get("slideId");
+  const slideId = searchParams.get("slideId");
   const presentationId = searchParams.get("presentationId");
-  const initialIndex = useMemo(() => {
-    if (!requestedSlideId) return 0;
-    const found = slides.findIndex((slide) => slide.id === requestedSlideId);
-    return found >= 0 ? found : 0;
-  }, [requestedSlideId]);
 
-  const [currentIndex, setCurrentIndex] = useState(initialIndex);
-  const [transitioning, setTransitioning] = useState(false);
+  const slides = getSlidesForPresentation(presentationId);
+  const startingIndex = findSlideIndex(slides, slideId);
 
-  useEffect(() => {
-    if (initialIndex !== currentIndex) {
-      setCurrentIndex(initialIndex);
-    }
-  }, [initialIndex, currentIndex]);
+  const [index, setIndex] = useState(startingIndex);
+  const slide = slides[index];
 
-  const currentSlide = useMemo(() => slides[currentIndex], [currentIndex]);
   const totalSlides = slides.length;
-  const slidePosition = `${currentIndex + 1} of ${totalSlides}`;
-
-  useEffect(() => {
-    if (!transitioning) return;
-    const timeout = setTimeout(() => setTransitioning(false), 220);
-    return () => clearTimeout(timeout);
-  }, [transitioning]);
+  const slidePosition = `${index + 1} of ${totalSlides}`;
 
   const handlePrevious = () => {
-    if (currentIndex === 0 || transitioning) return;
-    setTransitioning(true);
-    setCurrentIndex((index) => Math.max(0, index - 1));
+    setIndex((value) => Math.max(0, value - 1));
   };
 
   const handleNext = () => {
-    if (currentIndex === totalSlides - 1 || transitioning) return;
-    setTransitioning(true);
-    setCurrentIndex((index) => Math.min(totalSlides - 1, index + 1));
+    setIndex((value) => Math.min(totalSlides - 1, value + 1));
   };
 
   return (
     <div className={styles.viewerShell}>
       <header className={styles.viewerHeader}>
         <div className={styles.headerLeft}>
-          <span className={styles.presentationTitle}>{presentationTitle}</span>
+          <span className={styles.presentationTitle}>Presentation Mode</span>
         </div>
         <div className={styles.headerCenter}>
-          <span className={styles.currentSlideTitle}>{currentSlide.title}</span>
+          <span className={styles.currentSlideTitle}>{slide.title}</span>
         </div>
         <div className={styles.headerRight}>
           <button
@@ -102,24 +71,15 @@ export default function ViewerPage() {
       </header>
 
       <main className={styles.viewerMain}>
-        <article
-          className={`${styles.slideCard} ${transitioning ? styles.slideCardTransition : styles.slideCardActive}`}
-        >
-          <h1 className={styles.slideTitle}>{currentSlide.title}</h1>
-          <p className={styles.slideContent}>
-            {currentSlide.content.split("\n").map((line, index) => (
-              <span key={`${line}-${index}`}>
-                {line}
-                <br />
-              </span>
-            ))}
-          </p>
+        <article className={`${styles.slideCard} ${styles.slideCardActive}`}>
+          <h1 className={styles.slideTitle}>{slide.title}</h1>
+          <p className={styles.slideContent}>{slide.subtitle}</p>
         </article>
       </main>
 
       <footer className={styles.viewerFooter}>
         <div className={styles.footerControls}>
-          <button type="button" className={styles.navButton} onClick={handlePrevious} disabled={currentIndex === 0 || transitioning}>
+          <button type="button" className={styles.navButton} onClick={handlePrevious} disabled={index === 0}>
             ⬅️ Previous
           </button>
           <span className={styles.slidePosition}>Slide {slidePosition}</span>
@@ -127,7 +87,7 @@ export default function ViewerPage() {
             type="button"
             className={styles.navButton}
             onClick={handleNext}
-            disabled={currentIndex === totalSlides - 1 || transitioning}
+            disabled={index === totalSlides - 1}
           >
             Next ➡️
           </button>
