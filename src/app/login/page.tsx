@@ -56,6 +56,7 @@ export default function LoginPage() {
         fontFamily: "Calibri, Arial, Helvetica, sans-serif",
         padding: 16,
         background: "#ffffff",
+        color: "#000000",
       }}
     >
       <div
@@ -79,14 +80,14 @@ export default function LoginPage() {
             style={{ height: "auto", display: "block" }}
           />
         </div>
-        <h1 style={{ fontSize: 28, fontWeight: 800, marginBottom: 8 }}>Login</h1>
-        <p style={{ color: "var(--muted)", marginBottom: 20 }}>
+        <h1 style={{ fontSize: 28, fontWeight: 800, marginBottom: 8, color: "#000000" }}>Login</h1>
+        <p style={{ color: "#000000", marginBottom: 20 }}>
           Use your <strong>@aramcodigital.com</strong> email to continue.
         </p>
 
         <form onSubmit={handleSubmit} style={{ display: "grid", gap: 12 }}>
-          <label style={{ display: "grid", gap: 6, textAlign: "left" }}>
-            <span style={{ fontWeight: 600, textAlign: "center" }}>Email</span>
+          <label style={{ display: "grid", gap: 6, textAlign: "left", color: "#000000" }}>
+            <span style={{ fontWeight: 600, textAlign: "center", color: "#000000" }}>Email</span>
             <input
               type="email"
               value={email}
@@ -98,15 +99,15 @@ export default function LoginPage() {
                 borderRadius: 10,
                 border: "1px solid var(--border)",
                 background: "transparent",
-                color: "inherit",
+                color: "#000000",
                 textAlign: "center",
                 outline: "none",
               }}
             />
           </label>
 
-          <label style={{ display: "grid", gap: 6, textAlign: "left" }}>
-            <span style={{ fontWeight: 600, textAlign: "center" }}>Password</span>
+          <label style={{ display: "grid", gap: 6, textAlign: "left", color: "#000000" }}>
+            <span style={{ fontWeight: 600, textAlign: "center", color: "#000000" }}>Password</span>
             <input
               type="password"
               value={password}
@@ -118,7 +119,7 @@ export default function LoginPage() {
                 borderRadius: 10,
                 border: "1px solid var(--border)",
                 background: "transparent",
-                color: "inherit",
+                color: "#000000",
                 textAlign: "center",
                 outline: "none",
               }}
@@ -166,6 +167,19 @@ export default function LoginPage() {
       >
         © 2025 Aramco Digital. All rights reserved.
       </footer>
+      <style jsx>{`
+        input::placeholder {
+          color: #000000;
+        }
+
+        input::-ms-input-placeholder {
+          color: #000000;
+        }
+
+        input:-ms-input-placeholder {
+          color: #000000;
+        }
+      `}</style>
     </div>
   );
 }
