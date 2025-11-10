@@ -225,7 +225,7 @@ export default function DashboardPage() {
             <div className={styles.content}>
               <section id="slides" className={`${styles.slidesSection} ${styles.card}`}>
                 <div className={styles.slidesHeader}>
-                  <h2>My Slides</h2>
+                  <h2>Home</h2>
                 </div>
 
                 <div className={styles.slidesTable} role="list">

@@ -1,23 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import TeamChatWidget from "@/components/TeamChatWidget";
 import styles from "./presentations.module.css";
-
-type PresentationRecord = {
-  presentationId: string;
-  title: string;
-  owner: string;
-  lastUpdated: string;
-  status: "Draft" | "Final";
-  slides: Array<{ id: string; title: string; subtitle: string }>;
-};
+import {
+  type PresentationRecord,
+  createPresentation,
+  fetchPresentations,
+} from "@/lib/mockPresentationsApi";
 
 type TemplateCard = {
   id: string;
   title: string;
-  accent: string;
+  icon: ReactNode;
 };
 
 type RecentPresentation = {
@@ -30,44 +26,100 @@ type RecentPresentation = {
 };
 
 const templates: TemplateCard[] = [
-  { id: "template-blank", title: "Blank presentation", accent: "var(--accent-orange)" },
-  { id: "template-team-update", title: "Team update", accent: "var(--accent-red)" },
-  { id: "template-project-review", title: "Project review", accent: "var(--accent-sky)" },
-  { id: "template-training", title: "Training deck", accent: "var(--accent-lilac)" },
-  { id: "template-executive", title: "Executive summary", accent: "var(--accent-slate)" },
+  {
+    id: "template-blank",
+    title: "Blank presentation",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+        <path d="M12 5v14" />
+        <path d="M5 12h14" />
+      </svg>
+    ),
+  },
+  {
+    id: "template-team-update",
+    title: "Team update",
+    icon: (
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <circle cx="8" cy="10" r="3" />
+        <circle cx="16" cy="10" r="3" />
+        <path d="M3 19c0-2.5 2-4.5 4.5-4.5h1" />
+        <path d="M13.5 14.5h1C17 14.5 19 16.5 19 19" />
+      </svg>
+    ),
+  },
+  {
+    id: "template-project-review",
+    title: "Project review",
+    icon: (
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M4 19h16" />
+        <path d="M8 19V9" />
+        <path d="M12 19v-6" />
+        <path d="M16 19v-9" />
+        <path d="M7 5h10" />
+        <path d="M14 5l2 2" />
+        <path d="M14 5l-2 2" />
+      </svg>
+    ),
+  },
+  {
+    id: "template-training",
+    title: "Training deck",
+    icon: (
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M4 7h8a4 4 0 0 1 4 4v8H8a4 4 0 0 1-4-4V7z" />
+        <path d="M12 3h8v12" />
+        <path d="M12 9h4" />
+      </svg>
+    ),
+  },
+  {
+    id: "template-executive",
+    title: "Executive summary",
+    icon: (
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M6 4h9l3 3v13H6z" />
+        <path d="m9 13 2 2 4-4" />
+      </svg>
+    ),
+  },
 ];
-
-const defaultRecents: RecentPresentation[] = [
-  {
-    id: "presentation-deep-learning",
-    title: "Lab Manual: Introduction to Deep Learning",
-    date: "18 Jun 2025",
-    thumbAccent: "linear-gradient(135deg, #79c7d9, #e1f3fb)",
-    type: "P",
-  },
-  {
-    id: "presentation-dbms",
-    title: "Advanced Coding & Databases for AI & Data Science",
-    date: "15 Dec 2024",
-    thumbAccent: "linear-gradient(135deg, #76d6b4, #e9f7f0)",
-    shared: true,
-    type: "G",
-  },
-  {
-    id: "presentation-ai-marketing",
-    title: "AI in Marketing Presentation",
-    date: "Opened 4 Oct 2024",
-    thumbAccent: "linear-gradient(135deg, #7f96ff, #e2e7ff)",
-    type: "P",
-  },
-];
-
-const STORAGE_KEY = "presentationsData";
 
 export default function PresentationsHome() {
   const router = useRouter();
   const [isDark, setIsDark] = useState(false);
-  const [recentCards, setRecentCards] = useState<RecentPresentation[]>(defaultRecents);
+  const [recentCards, setRecentCards] = useState<RecentPresentation[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const saved = typeof window !== "undefined" ? localStorage.getItem("theme") : null;
@@ -89,31 +141,33 @@ export default function PresentationsHome() {
   }, [isDark]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return;
-    try {
-      const parsed = JSON.parse(raw) as PresentationRecord[];
-      if (!Array.isArray(parsed)) return;
-      const mapped = parsed.map((presentation) => ({
-        id: presentation.presentationId,
-        title: presentation.title || "Untitled presentation",
-        date: new Date(presentation.lastUpdated).toLocaleDateString("en-GB", {
-          day: "2-digit",
-          month: "short",
-          year: "numeric",
-        }),
-        thumbAccent: "linear-gradient(135deg, #7ccba2, #e2f7ec)",
-        type: "P",
-      }));
-      setRecentCards((prev) => {
-        const existingIds = new Set(prev.map((item) => item.id));
-        const filtered = mapped.filter((item) => !existingIds.has(item.id));
-        return [...filtered, ...prev];
-      });
-    } catch (error) {
-      console.error("Failed to parse presentations from storage", error);
-    }
+    let cancelled = false;
+
+    const loadPresentations = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const records = await fetchPresentations();
+        if (!cancelled) {
+          setRecentCards(records.map(mapRecordToCard));
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.error("Failed to load presentations", err);
+          setError("We couldn’t load your presentations right now. Please try again shortly.");
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    void loadPresentations();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const toggleTheme = () => setIsDark((value) => !value);
@@ -122,7 +176,7 @@ export default function PresentationsHome() {
     router.push(`/editor?presentationId=${encodeURIComponent(presentationId)}&slideId=slide-1`);
   };
 
-  const handleBlankClick = () => {
+  const handleBlankClick = async () => {
     const presentationId = `presentation-${Date.now()}`;
     const now = new Date();
     const newPresentation: PresentationRecord = {
@@ -140,35 +194,14 @@ export default function PresentationsHome() {
       ],
     };
 
-    if (typeof window !== "undefined") {
-      try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        const parsed = raw ? (JSON.parse(raw) as PresentationRecord[]) : [];
-        const nextData = Array.isArray(parsed) ? [...parsed, newPresentation] : [newPresentation];
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(nextData));
-      } catch (error) {
-        console.error("Failed to persist new presentation", error);
-      }
+    try {
+      await createPresentation(newPresentation);
+      setRecentCards((prev) => [mapRecordToCard(newPresentation), ...prev]);
+      router.push(`/editor?presentationId=${encodeURIComponent(presentationId)}&slideId=slide-1`);
+    } catch (err) {
+      console.error("Failed to create presentation", err);
+      setError("We couldn’t create your presentation. Please try again.");
     }
-
-    const displayDate = now.toLocaleDateString("en-GB", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-
-    setRecentCards((prev) => [
-      {
-        id: presentationId,
-        title: newPresentation.title,
-        date: displayDate,
-        thumbAccent: "linear-gradient(135deg, #7ccba2, #e2f7ec)",
-        type: "P",
-      },
-      ...prev,
-    ]);
-
-    router.push(`/editor?presentationId=${encodeURIComponent(presentationId)}&slideId=slide-1`);
   };
 
   const handleTeamUpdateClick = () => {
@@ -231,34 +264,35 @@ export default function PresentationsHome() {
           <div className={styles.searchWrap}>
             <input className={styles.searchInput} placeholder="Search presentations…" aria-label="Search presentations" />
           </div>
-          <button className={styles.newButton} type="button" onClick={() => goToPresentation("new-presentation")}>
-            Start new
-          </button>
         </header>
 
         <main className={styles.content}>
           <section className={styles.templatesSection}>
             <div className={styles.sectionHeader}>
-              <h2>Start a new presentation</h2>
+              <h2>Home</h2>
             </div>
             <div className={styles.templateRow}>
               {templates.map((template) => (
                 <article
                   key={template.id}
                   className={styles.templateCard}
-                  onClick={
-                    template.id === "template-blank"
-                      ? handleBlankClick
-                      : template.id === "template-team-update"
-                      ? handleTeamUpdateClick
-                      : template.id === "template-training"
-                      ? handleTrainingClick
-                      : template.id === "template-executive"
-                      ? handleExecutiveSummaryClick
-                      : () => goToPresentation(template.id)
-                  }
+                  onClick={() => {
+                    if (template.id === "template-blank") {
+                      void handleBlankClick();
+                    } else if (template.id === "template-team-update") {
+                      handleTeamUpdateClick();
+                    } else if (template.id === "template-training") {
+                      handleTrainingClick();
+                    } else if (template.id === "template-executive") {
+                      handleExecutiveSummaryClick();
+                    } else {
+                      goToPresentation(template.id);
+                    }
+                  }}
                 >
-                  <div className={styles.templateThumb} style={{ background: template.accent }} aria-hidden />
+                  <div className={styles.templateIcon} aria-hidden="true">
+                    {template.icon}
+                  </div>
                   <h3>{template.title}</h3>
                 </article>
               ))}
@@ -270,35 +304,43 @@ export default function PresentationsHome() {
               <h2>Recent presentations</h2>
             </div>
 
-            <div className={styles.recentGrid}>
-              {recentCards.map((item) => (
-                <article
-                  key={item.id}
-                  className={styles.recentCard}
-                  onClick={() => goToPresentation(item.id)}
-                >
-                  <div className={styles.recentThumb} style={{ background: item.thumbAccent }}>
-                    <span className={styles.fileBadge}>{item.type ?? "P"}</span>
-                  </div>
-                  <div className={styles.recentMeta}>
-                    <h3>{item.title}</h3>
-                    <p>{item.date}</p>
-                    {item.shared ? <span className={styles.sharedLabel}>Shared with you</span> : null}
-                  </div>
-                  <button
-                    className={styles.cardMenu}
-                    type="button"
-                    aria-label="More actions"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      goToPresentation(item.id);
-                    }}
+            {isLoading ? (
+              <div className={styles.emptyState}>Loading your presentations…</div>
+            ) : error ? (
+              <div className={styles.emptyState}>{error}</div>
+            ) : recentCards.length === 0 ? (
+              <div className={styles.emptyState}>You haven’t created any presentations yet.</div>
+            ) : (
+              <div className={styles.recentGrid}>
+                {recentCards.map((item) => (
+                  <article
+                    key={item.id}
+                    className={styles.recentCard}
+                    onClick={() => goToPresentation(item.id)}
                   >
-                    ⋮
-                  </button>
-                </article>
-              ))}
-            </div>
+                    <div className={styles.recentThumb} style={{ background: item.thumbAccent }}>
+                      <span className={styles.fileBadge}>{item.type ?? "P"}</span>
+                    </div>
+                    <div className={styles.recentMeta}>
+                      <h3>{item.title}</h3>
+                      <p>{item.date}</p>
+                      {item.shared ? <span className={styles.sharedLabel}>Shared with you</span> : null}
+                    </div>
+                    <button
+                      className={styles.cardMenu}
+                      type="button"
+                      aria-label="More actions"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        goToPresentation(item.id);
+                      }}
+                    >
+                      ⋮
+                    </button>
+                  </article>
+                ))}
+              </div>
+            )}
           </section>
         </main>
 
@@ -308,4 +350,21 @@ export default function PresentationsHome() {
       </div>
     </>
   );
+}
+
+function mapRecordToCard(record: PresentationRecord): RecentPresentation {
+  const displayDate = new Date(record.lastUpdated).toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+
+  return {
+    id: record.presentationId,
+    title: record.title || "Untitled presentation",
+    date: displayDate,
+    thumbAccent: "linear-gradient(135deg, #7ccba2, #e2f7ec)",
+    type: "P",
+    shared: record.owner !== "Current User" && record.owner !== "You",
+  };
 }

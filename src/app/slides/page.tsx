@@ -133,7 +133,7 @@ export default function SlidesHome() {
         <main className={styles.content}>
           <section className={styles.templatesSection}>
             <div className={styles.sectionHeader}>
-              <h2>Start a new presentation</h2>
+              <h2>Home</h2>
               <button className={styles.templateGallery} type="button">Template gallery ▾</button>
             </div>
             <div className={styles.templateRow}>
