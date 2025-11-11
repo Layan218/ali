@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import TeamChatWidget from "@/components/TeamChatWidget";
+import { useTheme } from "@/hooks/useTheme";
 import styles from "./dashboard.module.css";
 
 type Slide = {
@@ -89,7 +90,7 @@ function describeAction(action: AuditLogEntry["action"]) {
 }
 
 export default function DashboardPage() {
-  const [isDark, setIsDark] = useState(false);
+  const { theme, toggleTheme } = useTheme();
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -100,33 +101,10 @@ export default function DashboardPage() {
     [selectedSlideId]
   );
 
-  useEffect(() => {
-    const saved = typeof window !== "undefined" ? localStorage.getItem("theme") : null;
-    const prefersDark =
-      typeof window !== "undefined" &&
-      window.matchMedia &&
-      window.matchMedia("(prefers-color-scheme: dark)").matches;
-    const shouldDark = saved ? saved === "dark" : prefersDark;
-    setIsDark(shouldDark);
-    if (shouldDark) document.documentElement.classList.add("dark");
-  }, []);
-
-  useEffect(() => {
-    if (isDark) {
-      document.documentElement.classList.add("dark");
-      localStorage.setItem("theme", "dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-      localStorage.setItem("theme", "light");
-    }
-  }, [isDark]);
-
   const visibleComments = useMemo(() => {
     if (!selectedSlide) return [] as Comment[];
     return comments.filter((comment) => comment.slideId === selectedSlide.id);
   }, [selectedSlide]);
-
-  const toggleTheme = () => setIsDark((value) => !value);
 
   return (
     <>
@@ -155,7 +133,7 @@ export default function DashboardPage() {
             onClick={toggleTheme}
             className={styles.themeToggle}
           >
-            {isDark ? (
+            {theme === "dark" ? (
               <svg
                 className={`${styles.icon} ${styles.iconSpin}`}
                 width="20"

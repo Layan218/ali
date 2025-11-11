@@ -3,8 +3,10 @@
 import Image from "next/image";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTheme } from "@/hooks/useTheme";
 
 export default function LoginPage() {
+  const { theme } = useTheme();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -39,12 +41,20 @@ export default function LoginPage() {
     try {
       await new Promise((r) => setTimeout(r, 500));
       router.push("/presentations");
-    } catch (err) {
+    } catch {
       setError("Login failed. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
   }
+
+  const isDark = theme === "dark";
+  const backgroundColor = isDark ? "#0f172a" : "#ffffff";
+  const foregroundColor = isDark ? "#e2e8f0" : "#000000";
+  const cardBackground = isDark ? "#17263b" : "#f7f7f7";
+  const borderColor = isDark ? "rgba(148, 163, 184, 0.35)" : "var(--border)";
+  const footerBackground = isDark ? "#101f33" : "#eeeeee";
+  const footerColor = isDark ? "#cbd5f5" : "#333333";
 
   return (
     <div
@@ -55,20 +65,20 @@ export default function LoginPage() {
         justifyContent: "center",
         fontFamily: "Calibri, Arial, Helvetica, sans-serif",
         padding: 16,
-        background: "#ffffff",
-        color: "#000000",
+        background: backgroundColor,
+        color: foregroundColor,
       }}
     >
       <div
         style={{
             width: "100%",
             maxWidth: 440,
-            border: "1px solid var(--border)",
+            border: `1px solid ${borderColor}`,
             borderRadius: 14,
             padding: 28,
             textAlign: "center",
             boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
-            background: "#f7f7f7",
+            background: cardBackground,
         }}
       >
         <div style={{ display: "grid", placeItems: "center", gap: 8, marginBottom: 16 }}>
@@ -80,14 +90,14 @@ export default function LoginPage() {
             style={{ height: "auto", display: "block" }}
           />
         </div>
-        <h1 style={{ fontSize: 28, fontWeight: 800, marginBottom: 8, color: "#000000" }}>Login</h1>
-        <p style={{ color: "#000000", marginBottom: 20 }}>
+        <h1 style={{ fontSize: 28, fontWeight: 800, marginBottom: 8, color: foregroundColor }}>Login</h1>
+        <p style={{ color: foregroundColor, marginBottom: 20 }}>
           Use your <strong>@aramcodigital.com</strong> email to continue.
         </p>
 
         <form onSubmit={handleSubmit} style={{ display: "grid", gap: 12 }}>
-          <label style={{ display: "grid", gap: 6, textAlign: "left", color: "#000000" }}>
-            <span style={{ fontWeight: 600, textAlign: "center", color: "#000000" }}>Email</span>
+          <label style={{ display: "grid", gap: 6, textAlign: "left", color: foregroundColor }}>
+            <span style={{ fontWeight: 600, textAlign: "center", color: foregroundColor }}>Email</span>
             <input
               type="email"
               value={email}
@@ -97,17 +107,17 @@ export default function LoginPage() {
               style={{
                 padding: "12px 14px",
                 borderRadius: 10,
-                border: "1px solid var(--border)",
-                background: "transparent",
-                color: "#000000",
+                border: `1px solid ${borderColor}`,
+                background: isDark ? "rgba(15, 23, 42, 0.45)" : "transparent",
+                color: foregroundColor,
                 textAlign: "center",
                 outline: "none",
               }}
             />
           </label>
 
-          <label style={{ display: "grid", gap: 6, textAlign: "left", color: "#000000" }}>
-            <span style={{ fontWeight: 600, textAlign: "center", color: "#000000" }}>Password</span>
+          <label style={{ display: "grid", gap: 6, textAlign: "left", color: foregroundColor }}>
+            <span style={{ fontWeight: 600, textAlign: "center", color: foregroundColor }}>Password</span>
             <input
               type="password"
               value={password}
@@ -117,9 +127,9 @@ export default function LoginPage() {
               style={{
                 padding: "12px 14px",
                 borderRadius: 10,
-                border: "1px solid var(--border)",
-                background: "transparent",
-                color: "#000000",
+                border: `1px solid ${borderColor}`,
+                background: isDark ? "rgba(15, 23, 42, 0.45)" : "transparent",
+                color: foregroundColor,
                 textAlign: "center",
                 outline: "none",
               }}
@@ -157,8 +167,8 @@ export default function LoginPage() {
           right: 0,
           bottom: 0,
           width: "100%",
-          background: "#eeeeee",
-          color: "#333",
+          background: footerBackground,
+          color: footerColor,
           textAlign: "center",
           padding: 12,
           fontFamily: "Calibri, Arial, Helvetica, sans-serif",
@@ -169,15 +179,15 @@ export default function LoginPage() {
       </footer>
       <style jsx>{`
         input::placeholder {
-          color: #000000;
+          color: ${isDark ? "#cbd5f5" : "#000000"};
         }
 
         input::-ms-input-placeholder {
-          color: #000000;
+          color: ${isDark ? "#cbd5f5" : "#000000"};
         }
 
         input:-ms-input-placeholder {
-          color: #000000;
+          color: ${isDark ? "#cbd5f5" : "#000000"};
         }
       `}</style>
     </div>

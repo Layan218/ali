@@ -1,32 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTheme } from "@/hooks/useTheme";
 import styles from "./page.module.css";
 
 export default function Home() {
   const router = useRouter();
-  const [isDark, setIsDark] = useState(false);
-
-  useEffect(() => {
-    const saved = typeof window !== "undefined" ? localStorage.getItem("theme") : null;
-    const prefersDark = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
-    const shouldDark = saved ? saved === "dark" : prefersDark;
-    setIsDark(shouldDark);
-    if (shouldDark) document.documentElement.classList.add("dark");
-  }, []);
-
-  useEffect(() => {
-    if (isDark) {
-      document.documentElement.classList.add("dark");
-      localStorage.setItem("theme", "dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-      localStorage.setItem("theme", "light");
-    }
-  }, [isDark]);
-
-  const toggleTheme = () => setIsDark((v) => !v);
+  const { theme, toggleTheme } = useTheme();
   const features = [
     {
       title: "Secure Login & Role Management",
@@ -103,7 +83,7 @@ export default function Home() {
             onClick={toggleTheme}
             className={styles.themeToggle}
           >
-            {isDark ? (
+            {theme === "dark" ? (
               // Sun icon for Dark Mode (switch to Light)
               <svg className={`${styles.icon} ${styles.iconSpin}`} width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M12 18a6 6 0 1 0 0-12 6 6 0 0 0 0 12Z" stroke="currentColor" strokeWidth="1.8"/>

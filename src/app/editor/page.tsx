@@ -6,6 +6,13 @@ import EditorPage from "./[id]/page";
 export default function EditorRootPage() {
   const searchParams = useSearchParams();
   const slideId = searchParams.get("slideId") ?? "slide-1";
+  const presentationId = searchParams.get("presentationId") ?? undefined;
 
-  return <EditorPage params={{ id: slideId }} />;
+  return (
+    <EditorPage
+      key={`${presentationId ?? "default"}-${slideId}`}
+      params={{ id: slideId }}
+      presentationId={presentationId}
+    />
+  );
 }

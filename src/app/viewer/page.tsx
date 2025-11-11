@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { demoSlides } from "@/data/demoSlides";
+import { useTheme } from "@/hooks/useTheme";
 import styles from "./viewer.module.css";
 
 type Slide = typeof demoSlides[number];
@@ -22,6 +23,7 @@ const findSlideIndex = (slides: Slide[], slideId?: string | null): number => {
 };
 
 export default function ViewerPage() {
+  useTheme();
   const router = useRouter();
   const searchParams = useSearchParams();
   const slideId = searchParams.get("slideId");

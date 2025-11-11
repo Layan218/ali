@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import TeamChatWidget from "@/components/TeamChatWidget";
 import styles from "./audit-log.module.css";
 import { useRouter } from "next/navigation";
+import { useTheme } from "@/hooks/useTheme";
 
 type LogEntry = {
   id: string;
@@ -40,32 +40,9 @@ const logEntries: LogEntry[] = [
 ];
 
 export default function AuditLogPage() {
-  const [isDark, setIsDark] = useState(false);
+  const { theme, toggleTheme } = useTheme();
   const pathname = usePathname();
   const router = useRouter();
-
-  useEffect(() => {
-    const saved = typeof window !== "undefined" ? localStorage.getItem("theme") : null;
-    const prefersDark =
-      typeof window !== "undefined" &&
-      window.matchMedia &&
-      window.matchMedia("(prefers-color-scheme: dark)").matches;
-    const shouldDark = saved ? saved === "dark" : prefersDark;
-    setIsDark(shouldDark);
-    if (shouldDark) document.documentElement.classList.add("dark");
-  }, []);
-
-  useEffect(() => {
-    if (isDark) {
-      document.documentElement.classList.add("dark");
-      localStorage.setItem("theme", "dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-      localStorage.setItem("theme", "light");
-    }
-  }, [isDark]);
-
-  const toggleTheme = () => setIsDark((value) => !value);
 
   return (
     <>
@@ -94,7 +71,7 @@ export default function AuditLogPage() {
             onClick={toggleTheme}
             className={styles.themeToggle}
           >
-            {isDark ? (
+            {theme === "dark" ? (
               <svg
                 className={`${styles.icon} ${styles.iconSpin}`}
                 width="20"
@@ -136,9 +113,9 @@ export default function AuditLogPage() {
           >
             Slides Home
           </button>
-          <a className={styles.secondary} href="/">
+          <Link className={styles.secondary} href="/">
             Back to Home
-          </a>
+          </Link>
         </div>
       </nav>
 

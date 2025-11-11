@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTheme } from "@/hooks/useTheme";
 import styles from "./slides.module.css";
 
 type TemplateCard = {
@@ -55,31 +55,8 @@ const recents: RecentPresentation[] = [
 ];
 
 export default function SlidesHome() {
-  const [isDark, setIsDark] = useState(false);
+  const { theme, toggleTheme } = useTheme();
   const router = useRouter();
-
-  useEffect(() => {
-    const saved = typeof window !== "undefined" ? localStorage.getItem("theme") : null;
-    const prefersDark =
-      typeof window !== "undefined" &&
-      window.matchMedia &&
-      window.matchMedia("(prefers-color-scheme: dark)").matches;
-    const shouldDark = saved ? saved === "dark" : prefersDark;
-    setIsDark(shouldDark);
-    if (shouldDark) document.documentElement.classList.add("dark");
-  }, []);
-
-  useEffect(() => {
-    if (isDark) {
-      document.documentElement.classList.add("dark");
-      localStorage.setItem("theme", "dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-      localStorage.setItem("theme", "light");
-    }
-  }, [isDark]);
-
-  const toggleTheme = () => setIsDark((value) => !value);
 
   const handleTemplateSelect = (template: TemplateCard) => {
     if (template.id === "blank") {
@@ -105,7 +82,7 @@ export default function SlidesHome() {
             onClick={toggleTheme}
             className={styles.themeToggle}
           >
-            {isDark ? (
+            {theme === "dark" ? (
               <svg className={`${styles.icon} ${styles.iconSpin}`} width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M12 18a6 6 0 1 0 0-12 6 6 0 0 0 0 12Z" stroke="currentColor" strokeWidth="1.8"/>
                 <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
@@ -157,14 +134,14 @@ export default function SlidesHome() {
                     role={isInteractive ? "button" : undefined}
                     tabIndex={isInteractive ? 0 : undefined}
                   >
-                    <div
-                      className={styles.templateThumb}
-                      style={{ background: template.accent }}
-                      aria-hidden
-                    />
-                    <h3>{template.title}</h3>
+                  <div
+                    className={styles.templateThumb}
+                    style={{ background: template.accent }}
+                    aria-hidden
+                  />
+                  <h3>{template.title}</h3>
                     {template.subtitle ? <p>{template.subtitle}</p> : null}
-                  </article>
+                </article>
                 );
               })}
             </div>

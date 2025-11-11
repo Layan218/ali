@@ -349,28 +349,28 @@
 
   .actions {
     flex-direction: column;
-    width: 100%;
+  width: 100%;
     max-width: 300px;
-  }
+}
 
   .primary,
   .secondary {
-    width: 100%;
+  width: 100%;
   }
 }
 
 @media (max-width: 640px) {
   .title {
     font-size: 36px;
-  }
+}
 
   .description {
     font-size: 15px;
-  }
+}
 
   .featureCard {
     padding: 24px;
-  }
+}
 
   .hero::before {
     height: 40%;
