@@ -1,17 +1,27 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, FormEvent } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import TeamChatWidget from "@/components/TeamChatWidget";
 import styles from "./editor.module.css";
+import EditorToolbar from "@/components/EditorToolbar";
+
+const cx = (...classes: Array<string | false | null | undefined>) =>
+  classes.filter(Boolean).join(" ");
+
+type AlignOption = "left" | "center" | "right";
+
+type SlideFormatting = Record<FieldKey, { lineHeight: number }>;
 
 type SlideData = {
   id: string;
   title: string;
   subtitle: string;
   notes: string;
+  theme: string;
+  formatting: SlideFormatting;
 };
 
 type ThemeOption = {
@@ -26,6 +36,18 @@ type CommentItem = {
   author: string;
   message: string;
   timestamp: string;
+};
+
+type CommandState = {
+  fontFamily: string;
+  fontSize: number;
+  bold: boolean;
+  italic: boolean;
+  underline: boolean;
+  color: string;
+  highlight: string;
+  align: AlignOption;
+  listType: "none" | "bullet" | "number";
 };
 
 const formattingButtons = ["Undo", "Redo", "Image", "Background", "Layout", "Theme", "Transition"] as const;
@@ -72,6 +94,26 @@ const placeholderMap: Record<FieldKey, string> = {
   notes: "",
 };
 
+const DEFAULT_THEME = "Aramco Classic";
+
+const DEFAULT_FORMATTING: SlideFormatting = {
+  title: { lineHeight: 1.2 },
+  subtitle: { lineHeight: 1.3 },
+  notes: { lineHeight: 1.4 },
+};
+
+const createDefaultFormatting = (): SlideFormatting => ({
+  title: { lineHeight: DEFAULT_FORMATTING.title.lineHeight },
+  subtitle: { lineHeight: DEFAULT_FORMATTING.subtitle.lineHeight },
+  notes: { lineHeight: DEFAULT_FORMATTING.notes.lineHeight },
+});
+
+const ensureFormatting = (formatting?: SlideFormatting): SlideFormatting => ({
+  title: { lineHeight: formatting?.title?.lineHeight ?? DEFAULT_FORMATTING.title.lineHeight },
+  subtitle: { lineHeight: formatting?.subtitle?.lineHeight ?? DEFAULT_FORMATTING.subtitle.lineHeight },
+  notes: { lineHeight: formatting?.notes?.lineHeight ?? DEFAULT_FORMATTING.notes.lineHeight },
+});
+
 const fieldKeyMap: Record<FieldKey, keyof SlideData> = {
   title: "title",
   subtitle: "subtitle",
@@ -84,6 +126,8 @@ const themes: ThemeOption[] = [
   { name: "Executive Slate", swatch: "linear-gradient(135deg, #1e293b 0%, #94a3b8 100%)" },
   { name: "Innovation Sky", swatch: "linear-gradient(135deg, #38bdf8 0%, #dbeafe 100%)" },
 ];
+
+const INITIAL_THEME = themes[0]?.name ?? DEFAULT_THEME;
 
 const initialComments: CommentItem[] = [
   {
@@ -115,9 +159,30 @@ function formatTitleFromId(id: string) {
 }
 
 const initialSlides: SlideData[] = [
-  { id: "slide-1", title: "Click to add title", subtitle: "Click to add subtitle", notes: "" },
-  { id: "slide-2", title: "Click to add title", subtitle: "Click to add subtitle", notes: "" },
-  { id: "slide-3", title: "Click to add title", subtitle: "Click to add subtitle", notes: "" },
+  {
+    id: "slide-1",
+    title: placeholderMap.title,
+    subtitle: placeholderMap.subtitle,
+    notes: "",
+    theme: INITIAL_THEME,
+    formatting: createDefaultFormatting(),
+  },
+  {
+    id: "slide-2",
+    title: placeholderMap.title,
+    subtitle: placeholderMap.subtitle,
+    notes: "",
+    theme: INITIAL_THEME,
+    formatting: createDefaultFormatting(),
+  },
+  {
+    id: "slide-3",
+    title: placeholderMap.title,
+    subtitle: placeholderMap.subtitle,
+    notes: "",
+    theme: INITIAL_THEME,
+    formatting: createDefaultFormatting(),
+  },
 ];
 
 export default function EditorPage({ params }: { params: { id: string } }) {
@@ -133,23 +198,21 @@ export default function EditorPage({ params }: { params: { id: string } }) {
   const [activeField, setActiveField] = useState<FieldKey>("title");
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
   const [isHighlightPickerOpen, setIsHighlightPickerOpen] = useState(false);
+  const [isThemePickerOpen, setIsThemePickerOpen] = useState(false);
   const [comments, setComments] = useState<CommentItem[]>(initialComments);
   const [newComment, setNewComment] = useState("");
+  const storageKey = useMemo(() => `presentation-${params.id}-slides`, [params.id]);
 
   const colorButtonRef = useRef<HTMLDivElement | null>(null);
   const highlightButtonRef = useRef<HTMLDivElement | null>(null);
+  const themeButtonRef = useRef<HTMLDivElement | null>(null);
   const titleRef = useRef<HTMLDivElement | null>(null);
   const subtitleRef = useRef<HTMLDivElement | null>(null);
   const notesRef = useRef<HTMLTextAreaElement | null>(null);
   const selectionRef = useRef<Range | null>(null);
+  const hasHydratedRef = useRef(false);
 
-  const [formatting, setFormatting] = useState<Record<FieldKey, { lineHeight: number }>>({
-    title: { lineHeight: 1.2 },
-    subtitle: { lineHeight: 1.3 },
-    notes: { lineHeight: 1.4 },
-  });
-
-  const [commandState, setCommandState] = useState({
+  const [commandState, setCommandState] = useState<CommandState>({
     fontFamily: "Calibri",
     fontSize: 14,
     bold: false,
@@ -158,13 +221,14 @@ export default function EditorPage({ params }: { params: { id: string } }) {
     color: "#202124",
     highlight: "transparent",
     align: "left",
-    listType: "none" as "none" | "bullet" | "number",
+    listType: "none",
   });
 
   const selectedSlide = useMemo(
     () => slides.find((slide) => slide.id === selectedSlideId) ?? slides[0],
     [selectedSlideId, slides]
   );
+  const selectedThemeName = selectedSlide?.theme ?? themes[0]?.name ?? DEFAULT_THEME;
   const currentSlideIndex = slides.findIndex((slide) => slide.id === selectedSlideId);
   const isFirstSlide = currentSlideIndex <= 0;
   const isLastSlide = currentSlideIndex === slides.length - 1;
@@ -192,6 +256,42 @@ export default function EditorPage({ params }: { params: { id: string } }) {
   }, [isDark]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const stored = window.localStorage.getItem(storageKey);
+      if (!stored) return;
+      const parsed = JSON.parse(stored) as SlideData[];
+      if (!Array.isArray(parsed) || parsed.length === 0) return;
+      const normalized = parsed.map((slide, index) => ({
+        ...slide,
+        id: slide.id || `slide-${index + 1}`,
+        title: slide.title ?? placeholderMap.title,
+        subtitle: slide.subtitle ?? placeholderMap.subtitle,
+        notes: slide.notes ?? "",
+        theme: slide.theme ?? themes[0]?.name ?? DEFAULT_THEME,
+        formatting: ensureFormatting(slide.formatting),
+      }));
+      setSlides(normalized);
+      setSelectedSlideId((current) => {
+        if (normalized.some((slide) => slide.id === current)) {
+          return current;
+        }
+        return normalized[0]?.id ?? current;
+      });
+    } catch (error) {
+      console.error("Failed to load slides from storage", error);
+    } finally {
+      hasHydratedRef.current = true;
+    }
+  }, [storageKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!hasHydratedRef.current) return;
+    window.localStorage.setItem(storageKey, JSON.stringify(slides));
+  }, [slides, storageKey]);
+
+  useEffect(() => {
     if (!isColorPickerOpen) return;
     const handleClickAway = (event: MouseEvent) => {
       if (!colorButtonRef.current?.contains(event.target as Node)) {
@@ -214,7 +314,19 @@ export default function EditorPage({ params }: { params: { id: string } }) {
   }, [isHighlightPickerOpen]);
 
   useEffect(() => {
+    if (!isThemePickerOpen) return;
+    const handleClickAway = (event: MouseEvent) => {
+      if (!themeButtonRef.current?.contains(event.target as Node)) {
+        setIsThemePickerOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickAway);
+    return () => document.removeEventListener("mousedown", handleClickAway);
+  }, [isThemePickerOpen]);
+
+  useEffect(() => {
     if (!selectedSlide) return;
+    const formatting = selectedSlide.formatting ?? DEFAULT_FORMATTING;
     if (titleRef.current) {
       titleRef.current.innerHTML = selectedSlide.title || placeholderMap.title;
       titleRef.current.style.lineHeight = `${formatting.title.lineHeight}`;
@@ -226,7 +338,7 @@ export default function EditorPage({ params }: { params: { id: string } }) {
     if (notesRef.current) {
       notesRef.current.style.lineHeight = `${formatting.notes.lineHeight}`;
     }
-  }, [selectedSlide, formatting.title.lineHeight, formatting.subtitle.lineHeight, formatting.notes.lineHeight]);
+  }, [selectedSlide]);
 
   useEffect(() => {
     const handleSelectionChange = () => {
@@ -401,7 +513,9 @@ export default function EditorPage({ params }: { params: { id: string } }) {
   };
 
   const handleNotesChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
-    updateSlideField("notes", event.target.value);
+    const value = event.target.value;
+    updateSlideField("notes", value);
+    autoResizeNotes(event.target);
   };
 
   const handleNotesFocus = () => {
@@ -409,6 +523,33 @@ export default function EditorPage({ params }: { params: { id: string } }) {
     setIsColorPickerOpen(false);
     setIsHighlightPickerOpen(false);
   };
+
+  const autoResizeNotes = (el: HTMLTextAreaElement) => {
+    el.style.height = "auto";
+    el.style.height = `${Math.min(Math.max(el.scrollHeight, 80), 400)}px`;
+  };
+
+  const handleThemeSelect = useCallback(
+    (themeName: string) => {
+      setSlides((prev) =>
+        prev.map((slide) =>
+          slide.id === selectedSlideId
+            ? {
+                ...slide,
+                theme: themeName,
+              }
+            : slide
+        )
+      );
+    },
+    [selectedSlideId]
+  );
+
+  useEffect(() => {
+    if (notesRef.current) {
+      autoResizeNotes(notesRef.current);
+    }
+  }, [selectedSlideId, selectedSlide?.notes]);
 
   const applyFontFamily = (font: string) => {
     execWithCommand("fontName", font);
@@ -440,7 +581,7 @@ export default function EditorPage({ params }: { params: { id: string } }) {
     syncCommandState();
   };
 
-  const applyAlign = (align: "left" | "center" | "right") => {
+  const applyAlign = (align: AlignOption) => {
     const command = align === "center" ? "justifyCenter" : align === "right" ? "justifyRight" : "justifyLeft";
     execWithCommand(command);
   };
@@ -451,15 +592,34 @@ export default function EditorPage({ params }: { params: { id: string } }) {
   };
 
   const applyLineHeight = (value: number) => {
-    if (!isEditableField) return;
-    const ref = getFieldRef(activeField);
-    if (!ref) return;
-    ref.style.lineHeight = value.toString();
-    setFormatting((prev) => ({
-      ...prev,
-      [activeField]: { lineHeight: value },
-    }));
-    syncActiveFieldContent(activeField);
+    if (activeField === "notes") {
+      if (notesRef.current) {
+        notesRef.current.style.lineHeight = value.toString();
+      }
+    } else {
+      if (!isEditableField) return;
+      const ref = getFieldRef(activeField);
+      if (!ref) return;
+      ref.style.lineHeight = value.toString();
+    }
+
+    setSlides((prev) =>
+      prev.map((slide) => {
+        if (slide.id !== selectedSlideId) return slide;
+        const formatting = ensureFormatting(slide.formatting);
+        return {
+          ...slide,
+          formatting: {
+            ...formatting,
+            [activeField]: { lineHeight: value },
+          },
+        };
+      })
+    );
+
+    if (activeField !== "notes") {
+      syncActiveFieldContent(activeField);
+    }
   };
 
   const applyUndo = () => execWithCommand("undo");
@@ -474,11 +634,14 @@ export default function EditorPage({ params }: { params: { id: string } }) {
   const handleAddSlide = () => {
     setSlides((prev) => {
       const nextIndex = prev.length + 1;
+      const themeName = selectedThemeName || themes[0]?.name || DEFAULT_THEME;
       const newSlide: SlideData = {
         id: `slide-${nextIndex}-${Date.now()}`,
         title: placeholderMap.title,
         subtitle: placeholderMap.subtitle,
         notes: "",
+        theme: themeName,
+        formatting: createDefaultFormatting(),
       };
       setSelectedSlideId(newSlide.id);
       return [...prev, newSlide];
@@ -552,7 +715,7 @@ export default function EditorPage({ params }: { params: { id: string } }) {
     setNewComment("");
   };
 
-  const toolbarDisabled = !isEditableField;
+  const toolbarDisabled = selectedSlide == null;
 
   const highlightIndicatorStyle: CSSProperties =
     commandState.highlight === "transparent"
@@ -569,8 +732,10 @@ export default function EditorPage({ params }: { params: { id: string } }) {
     Transition: () => undefined,
   };
 
+  const currentFormatting = selectedSlide ? ensureFormatting(selectedSlide.formatting) : DEFAULT_FORMATTING;
+
   const getTextStyle = (field: FieldKey): CSSProperties => ({
-    lineHeight: `${formatting[field]?.lineHeight ?? 1.2}`,
+    lineHeight: `${currentFormatting[field]?.lineHeight ?? DEFAULT_FORMATTING[field].lineHeight}`,
     whiteSpace: "pre-wrap",
   });
 
@@ -585,6 +750,12 @@ export default function EditorPage({ params }: { params: { id: string } }) {
       router.push("/viewer");
     }
   };
+
+  const toggleColorPicker = () => setIsColorPickerOpen((prev) => !prev);
+  const toggleHighlightPicker = () => setIsHighlightPickerOpen((prev) => !prev);
+  const toggleThemePicker = () => setIsThemePickerOpen((prev) => !prev);
+  const currentLineHeight =
+    currentFormatting[activeField]?.lineHeight ?? DEFAULT_FORMATTING[activeField]?.lineHeight ?? 1.2;
 
   return (
     <>
@@ -675,11 +846,7 @@ export default function EditorPage({ params }: { params: { id: string } }) {
                       <span className={`${styles.statusBadge} ${isFinal ? styles.statusFinal : styles.statusDraft}`}>
                         {isFinal ? "Final" : "Draft"}
                       </span>
-                      <button
-                        type="button"
-                        className={styles.statusToggle}
-                        onClick={() => setIsFinal((value) => !value)}
-                      >
+                      <button type="button" className={styles.statusToggle} onClick={() => setIsFinal((value) => !value)}>
                         {isFinal ? "Mark as Draft" : "Mark as Final"}
                       </button>
                     </div>
@@ -709,370 +876,217 @@ export default function EditorPage({ params }: { params: { id: string } }) {
                   </button>
                 </div>
               </div>
-
-              <div className={styles.toolbarRow}>
-                <div className={styles.toolbar}>
-                  <div className={styles.toolbarGroup}>
-                    <select
-                      className={styles.toolbarSelect}
-                      value={commandState.fontFamily}
-                      onFocus={restoreSelection}
-                      onChange={(event) => applyFontFamily(event.target.value)}
-                      aria-label="Font family"
-                      disabled={toolbarDisabled}
-                    >
-                      {fontFamilies.map((family) => (
-                        <option key={family} value={family}>
-                          {family}
-                        </option>
-                      ))}
-                    </select>
-
-                    <select
-                      className={styles.toolbarSelect}
-                      value={commandState.fontSize}
-                      onFocus={restoreSelection}
-                      onChange={(event) => applyFontSize(Number(event.target.value))}
-                      aria-label="Font size"
-                      disabled={toolbarDisabled}
-                    >
-                      {fontSizes.map((size) => (
-                        <option key={size} value={size}>
-                          {size}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className={styles.toolbarGroup}>
-                    <button
-                      type="button"
-                      className={`${styles.toolbarButton} ${commandState.bold ? styles.toolbarButtonActive : ""}`}
-                      onMouseDown={handleToolbarMouseDown}
-                      onClick={toggleBold}
-                      aria-pressed={commandState.bold}
-                      disabled={toolbarDisabled}
-                    >
-                      B
-                    </button>
-                    <button
-                      type="button"
-                      className={`${styles.toolbarButton} ${commandState.italic ? styles.toolbarButtonActive : ""}`}
-                      onMouseDown={handleToolbarMouseDown}
-                      onClick={toggleItalic}
-                      aria-pressed={commandState.italic}
-                      disabled={toolbarDisabled}
-                    >
-                      <em>I</em>
-                    </button>
-                    <button
-                      type="button"
-                      className={`${styles.toolbarButton} ${commandState.underline ? styles.toolbarButtonActive : ""}`}
-                      onMouseDown={handleToolbarMouseDown}
-                      onClick={toggleUnderline}
-                      aria-pressed={commandState.underline}
-                      disabled={toolbarDisabled}
-                    >
-                      <span className={styles.toolbarUnderline}>U</span>
-                    </button>
-                  </div>
-
-                  <div className={styles.toolbarGroup} ref={colorButtonRef}>
-                    <button
-                      type="button"
-                      className={styles.colorButton}
-                      onMouseDown={handleToolbarMouseDown}
-                      onClick={() => setIsColorPickerOpen((value) => !value)}
-                      aria-expanded={isColorPickerOpen}
-                      aria-label="Text color"
-                      disabled={toolbarDisabled}
-                    >
-                      <span
-                        className={`${styles.colorIndicator} ${
-                          commandState.color === "transparent" ? styles.colorIndicatorTransparent : ""
-                        }`}
-                        style={{ backgroundColor: commandState.color === "transparent" ? undefined : commandState.color }}
-                      />
-                    </button>
-                    {isColorPickerOpen && !toolbarDisabled ? (
-                      <div className={styles.colorPopover}>
-                        {colorOptions.map((option) => (
-                          <button
-                            key={option.value}
-                            type="button"
-                            className={`${styles.colorOption} ${
-                              option.value === "transparent" ? styles.colorOptionTransparent : ""
-                            }`}
-                            style={{ backgroundColor: option.value === "transparent" ? undefined : option.value }}
-                            onClick={() => applyTextColor(option.value)}
-                            aria-label={`Set text color to ${option.name}`}
-                          />
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-
-                  <div className={styles.toolbarGroup} ref={highlightButtonRef}>
-                    <button
-                      type="button"
-                      className={styles.colorButton}
-                      onMouseDown={handleToolbarMouseDown}
-                      onClick={() => setIsHighlightPickerOpen((value) => !value)}
-                      aria-expanded={isHighlightPickerOpen}
-                      aria-label="Highlight color"
-                      disabled={toolbarDisabled}
-                    >
-                      <span
-                        className={`${styles.colorIndicator} ${
-                          commandState.highlight === "transparent" ? styles.colorIndicatorTransparent : ""
-                        }`}
-                        style={highlightIndicatorStyle}
-                      />
-                    </button>
-                    {isHighlightPickerOpen && !toolbarDisabled ? (
-                      <div className={styles.colorPopover}>
-                        {highlightOptions.map((option) => (
-                          <button
-                            key={option.value}
-                            type="button"
-                            className={`${styles.colorOption} ${
-                              option.value === "transparent" ? styles.colorOptionTransparent : ""
-                            }`}
-                            style={{ backgroundColor: option.value === "transparent" ? undefined : option.value }}
-                            onClick={() => applyHighlightColor(option.value)}
-                            aria-label={`Set highlight color to ${option.name}`}
-                          />
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-
-                  <div className={styles.toolbarGroup}>
-                    {(["left", "center", "right"] as const).map((align) => (
-                      <button
-                        type="button"
-                        key={align}
-                        className={`${styles.toolbarButton} ${
-                          commandState.align === align ? styles.toolbarButtonActive : ""
-                        }`}
-                        onMouseDown={handleToolbarMouseDown}
-                        onClick={() => applyAlign(align)}
-                        aria-pressed={commandState.align === align}
-                        disabled={toolbarDisabled}
-                      >
-                        {align === "left" ? "⟸" : align === "center" ? "⇔" : "⟹"}
-                      </button>
-                    ))}
-                  </div>
-
-                  <div className={styles.toolbarGroup}>
-                    <button
-                      type="button"
-                      className={`${styles.toolbarButton} ${
-                        commandState.listType === "bullet" ? styles.toolbarButtonActive : ""
-                      }`}
-                      onMouseDown={handleToolbarMouseDown}
-                      onClick={() => applyList("bullet")}
-                      aria-pressed={commandState.listType === "bullet"}
-                      disabled={toolbarDisabled}
-                    >
-                      •
-                    </button>
-                    <button
-                      type="button"
-                      className={`${styles.toolbarButton} ${
-                        commandState.listType === "number" ? styles.toolbarButtonActive : ""
-                      }`}
-                      onMouseDown={handleToolbarMouseDown}
-                      onClick={() => applyList("number")}
-                      aria-pressed={commandState.listType === "number"}
-                      disabled={toolbarDisabled}
-                    >
-                      1.
-                    </button>
-                  </div>
-
-                  <div className={styles.toolbarGroup}>
-                    <select
-                      className={styles.toolbarSelect}
-                      value={String(formatting[activeField]?.lineHeight ?? 1.2)}
-                      onFocus={restoreSelection}
-                      onChange={(event) => applyLineHeight(Number(event.target.value))}
-                      aria-label="Line spacing"
-                      disabled={toolbarDisabled}
-                    >
-                      {lineSpacingOptions.map((spacing) => (
-                        <option key={spacing} value={spacing}>
-                          {spacing}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className={`${styles.toolbarGroup} ${styles.toolbarSpacer}`}>
-                    {formattingButtons.map((button) => (
-                      <button
-                        type="button"
-                        key={button}
-                        className={styles.toolbarButton}
-                        onMouseDown={handleToolbarMouseDown}
-                        onClick={() => toolbarActions[button]?.()}
-                      >
-                        {button}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
             </header>
 
-            <div className={styles.editorLayout}>
-              <aside className={styles.slidesSidebar}>
-                <div className={styles.slideList}>
-                  {slides.map((slide, index) => {
-                    const isActive = slide.id === selectedSlideId;
-                    return (
+            <div className={styles.workspaceFrame}>
+              <header className={styles.workspaceToolbar}>
+                <EditorToolbar
+                  fontFamilies={fontFamilies}
+                  fontSizes={fontSizes}
+                  lineSpacingOptions={lineSpacingOptions}
+                  formattingButtons={formattingButtons}
+                  toolbarActions={toolbarActions}
+                  toolbarDisabled={toolbarDisabled}
+                  commandState={commandState}
+                  highlightIndicatorStyle={highlightIndicatorStyle}
+                  colorOptions={colorOptions}
+                  highlightOptions={highlightOptions}
+                  isColorPickerOpen={isColorPickerOpen}
+                  isHighlightPickerOpen={isHighlightPickerOpen}
+                  isThemePickerOpen={isThemePickerOpen}
+                  onToggleColorPicker={toggleColorPicker}
+                  onToggleHighlightPicker={toggleHighlightPicker}
+                  onToggleThemePicker={toggleThemePicker}
+                  colorButtonRef={colorButtonRef}
+                  highlightButtonRef={highlightButtonRef}
+                  themeButtonRef={themeButtonRef}
+                  onFontFamilyChange={applyFontFamily}
+                  onFontSizeChange={applyFontSize}
+                  onBold={toggleBold}
+                  onItalic={toggleItalic}
+                  onUnderline={toggleUnderline}
+                  onTextColorSelect={applyTextColor}
+                  onHighlightColorSelect={applyHighlightColor}
+                  onAlign={applyAlign}
+                  onList={applyList}
+                  onLineHeightChange={applyLineHeight}
+                  onUndo={applyUndo}
+                  onRedo={applyRedo}
+                  onToolbarMouseDown={handleToolbarMouseDown}
+                  onRestoreSelection={restoreSelection}
+                  lineHeightValue={currentLineHeight}
+                  themes={themes}
+                  selectedTheme={selectedThemeName}
+                  onThemeSelect={handleThemeSelect}
+                />
+              </header>
+
+              <div className={styles.workspaceBody}>
+                <aside className={styles.slideRail}>
+                  <div className={styles.slideRailList}>
+                    {slides.map((slide, index) => {
+                      const isActive = slide.id === selectedSlideId;
+                      return (
+                        <button
+                          type="button"
+                          key={slide.id}
+                          className={cx(
+                            styles.slideRailItem,
+                            isActive ? styles.slideRailItemActive : styles.slideRailItemInactive
+                          )}
+                          onClick={() => {
+                            setSelectedSlideId(slide.id);
+                          }}
+                        >
+                          <span
+                            className={cx(
+                              styles.slideRailIndex,
+                              isActive ? styles.slideRailIndexActive : styles.slideRailIndexInactive
+                            )}
+                          >
+                            {index + 1}
+                          </span>
+                          <div className={styles.slideRailThumbnail} />
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <button type="button" className={styles.newSlideButton} onClick={handleAddSlide}>
+                    + New slide
+                  </button>
+                </aside>
+
+                <section className={styles.canvasRegion}>
+                  <div className={styles.canvasShell}>
+                    <div className={styles.canvasSurface}>
+                      <div
+                        ref={titleRef}
+                        className={styles.slideTitleInput}
+                        contentEditable
+                        suppressContentEditableWarning
+                        role="textbox"
+                        aria-label="Slide title"
+                        onInput={() => handleContentInput("title")}
+                        onFocus={() => handleContentFocus("title")}
+                        onBlur={() => handleContentBlur("title")}
+                        style={getTextStyle("title")}
+                      />
+                      <div
+                        ref={subtitleRef}
+                        className={styles.slideSubtitleInput}
+                        contentEditable
+                        suppressContentEditableWarning
+                        role="textbox"
+                        aria-label="Slide subtitle"
+                        onInput={() => handleContentInput("subtitle")}
+                        onFocus={() => handleContentFocus("subtitle")}
+                        onBlur={() => handleContentBlur("subtitle")}
+                        style={getTextStyle("subtitle")}
+                      />
+                    </div>
+                    <div className={styles.canvasActionBar}>
+                      <button type="button" onClick={handleSaveSlide} className={`${styles.canvasActionButton} ${styles.canvasActionPrimary}`}>
+                        Save
+                      </button>
+                      <button type="button" className={`${styles.canvasActionButton} ${styles.canvasActionSecondary}`}>
+                        Share
+                      </button>
                       <button
                         type="button"
-                        key={slide.id}
-                        className={`${styles.slideItem} ${isActive ? styles.slideItemActive : ""}`}
-                        onClick={() => setSelectedSlideId(slide.id)}
+                        onClick={handleOpenSlideshow}
+                        className={`${styles.canvasActionButton} ${styles.canvasActionSecondary}`}
                       >
-                        <span className={styles.slideNumber}>{index + 1}</span>
-                        <div className={styles.slideThumb} aria-hidden />
+                        Slideshow
                       </button>
-                    );
-                  })}
-                </div>
-                <button type="button" className={styles.newSlideButton} onClick={handleAddSlide}>
-                  + New slide
-                </button>
-              </aside>
-
-              <main className={styles.canvasArea}>
-                <div className={styles.slideCanvas}>
-                  <div
-                    ref={titleRef}
-                    className={styles.slideTitleInput}
-                    contentEditable
-                    suppressContentEditableWarning
-                    role="textbox"
-                    aria-label="Slide title"
-                    onInput={() => handleContentInput("title")}
-                    onFocus={() => handleContentFocus("title")}
-                    onBlur={() => handleContentBlur("title")}
-                    style={getTextStyle("title")}
-                  />
-                  <div
-                    ref={subtitleRef}
-                    className={styles.slideSubtitleInput}
-                    contentEditable
-                    suppressContentEditableWarning
-                    role="textbox"
-                    aria-label="Slide subtitle"
-                    onInput={() => handleContentInput("subtitle")}
-                    onFocus={() => handleContentFocus("subtitle")}
-                    onBlur={() => handleContentBlur("subtitle")}
-                    style={getTextStyle("subtitle")}
-                  />
-                </div>
-
-                <div className={styles.slideActions}>
-                  <button
-                    type="button"
-                    className={`${styles.actionButton} ${styles.actionPrimary}`}
-                    onClick={handleSaveSlide}
-                  >
-                    Save
-                  </button>
-                  <button
-                    type="button"
-                    className={styles.actionButton}
-                    onClick={handleMoveUp}
-                    disabled={isFirstSlide}
-                  >
-                    Move Up
-                  </button>
-                  <button
-                    type="button"
-                    className={styles.actionButton}
-                    onClick={handleMoveDown}
-                    disabled={isLastSlide}
-                  >
-                    Move Down
-                  </button>
-                  <button
-                    type="button"
-                    className={`${styles.actionButton} ${styles.actionDanger}`}
-                    onClick={handleDeleteSlide}
-                    disabled={!canDeleteSlide}
-                  >
-                    Delete Slide
-                  </button>
-                </div>
-
-                <section className={styles.themeSection} aria-labelledby="theme-section-heading">
-                  <div className={styles.themeHeader}>
-                    <h2 id="theme-section-heading" className={styles.themeTitle}>
-                      Themes
-                    </h2>
-                    <span className={styles.themeSubtitle}>Quickly explore presentation looks.</span>
-                  </div>
-                  <div className={styles.themeRow}>
-                    {themes.map((theme) => (
-                      <div key={theme.name} className={styles.themeCard}>
-                        <div className={styles.themeSwatch} style={{ background: theme.swatch }} />
-                        <div className={styles.themeName}>{theme.name}</div>
-                      </div>
-                    ))}
+                      <button
+                        type="button"
+                        onClick={handleMoveUp}
+                        disabled={isFirstSlide}
+                        className={`${styles.canvasActionButton} ${styles.canvasActionSecondary}`}
+                      >
+                        Move Up
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleMoveDown}
+                        disabled={isLastSlide}
+                        className={`${styles.canvasActionButton} ${styles.canvasActionSecondary}`}
+                      >
+                        Move Down
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDeleteSlide}
+                        disabled={!canDeleteSlide}
+                        className={`${styles.canvasActionButton} ${styles.canvasActionDanger}`}
+                      >
+                        Delete Slide
+                      </button>
+                    </div>
+                    <div className={styles.notesRibbon}>
+                      <header className={styles.notesHeader}>
+                        <div>
+                          <h2 className={styles.notesTitle}>Speaker Notes</h2>
+                          <span className={styles.notesSubtitle}>Keep presenter notes handy for this slide.</span>
+                        </div>
+                        <span className={styles.badge}>Private</span>
+                      </header>
+                      <textarea
+                        id="speaker-notes"
+                        ref={notesRef}
+                        className={styles.notesTextarea}
+                        value={selectedSlide?.notes ?? ""}
+                        onChange={handleNotesChange}
+                        onFocus={handleNotesFocus}
+                        onInput={(event) => autoResizeNotes(event.currentTarget)}
+                        aria-label="Slide notes"
+                        placeholder="Click to add speaker notes"
+                      />
+                    </div>
                   </div>
                 </section>
+              </div>
 
-                <div className={styles.notesArea}>
-                  <div className={styles.notesLabel}>Click to add speaker notes</div>
-                  <textarea
-                    ref={notesRef}
-                    className={styles.notesInput}
-                    value={selectedSlide?.notes ?? ""}
-                    onChange={handleNotesChange}
-                    onFocus={handleNotesFocus}
-                    aria-label="Slide notes"
-                  />
-                </div>
-              </main>
-
-              <aside className={styles.themesPanel}>
-                <div className={styles.commentsSection}>
-                  <div className={styles.commentsHeader}>Comments</div>
-                  <div className={styles.commentsList}>
-                    {comments.map((comment) => (
-                      <div key={comment.id} className={styles.commentItem}>
-                        <div className={styles.commentMeta}>
-                          <span className={styles.commentAuthor}>{comment.author}</span>
-                          <span className={styles.commentTimestamp}>{comment.timestamp}</span>
-                        </div>
-                        <p className={styles.commentMessage}>{comment.message}</p>
+              <section className={styles.bottomSection}>
+                <div className={styles.bottomGrid}>
+                  <section className={`${styles.bottomCard} ${styles.commentsPanel}`}>
+                    <header className={styles.bottomCardHeader}>
+                      <div>
+                        <h2 className="text-xl font-semibold text-cyan-700">Comments</h2>
+                        <p className="text-sm text-gray-600">Collaborate with your team in real time.</p>
                       </div>
-                    ))}
-                  </div>
-                  <form className={styles.commentComposer} onSubmit={handleCommentSubmit}>
-                    <label htmlFor="new-comment" className={styles.commentLabel}>
-                      Add a comment
-                    </label>
-                    <textarea
-                      id="new-comment"
-                      className={styles.commentInput}
-                      value={newComment}
-                      onChange={(event) => setNewComment(event.target.value)}
-                      placeholder="Share feedback for the team..."
-                      rows={3}
-                    />
-                    <button type="submit" className={`${styles.commentButton} ${styles.actionPrimary}`}>
-                      Add Comment
-                    </button>
-                  </form>
+                      <span className={styles.badge}>Team</span>
+                    </header>
+                    <div className={styles.commentsList}>
+                      {comments.map((comment) => (
+                        <div key={comment.id} className={styles.commentCard}>
+                          <div className={styles.commentMeta}>
+                            <span>{comment.author}</span>
+                            <span>{comment.timestamp}</span>
+                          </div>
+                          <p className="mt-3 text-slate-700 leading-relaxed">{comment.message}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <form className={styles.commentForm} onSubmit={handleCommentSubmit}>
+                      <label htmlFor="new-comment" className="text-sm font-medium text-slate-700">
+                        Add a comment
+                      </label>
+                      <textarea
+                        id="new-comment"
+                        className={styles.commentTextarea}
+                        value={newComment}
+                        onChange={(event) => setNewComment(event.target.value)}
+                        placeholder="Share feedback for the team..."
+                        rows={3}
+                      />
+                      <button type="submit" className={styles.commentButton}>
+                        Add Comment
+                      </button>
+                    </form>
+                  </section>
                 </div>
-              </aside>
+              </section>
             </div>
           </div>
 

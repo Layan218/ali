@@ -1,6 +1,7 @@
 "use client";
 
-import { CSSProperties, RefObject } from "react";
+import { CSSProperties, RefObject, useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import styles from "@/app/editor/[id]/editor.module.css";
 
 type AlignOption = "left" | "center" | "right";
@@ -11,6 +12,11 @@ type ToolbarActions = Record<string, (() => void) | undefined>;
 type ColorOption = {
   name: string;
   value: string;
+};
+
+type ThemeOption = {
+  name: string;
+  swatch: string;
 };
 
 type EditorToolbarProps = {
@@ -36,10 +42,13 @@ type EditorToolbarProps = {
   highlightOptions: readonly ColorOption[];
   isColorPickerOpen: boolean;
   isHighlightPickerOpen: boolean;
+  isThemePickerOpen: boolean;
   onToggleColorPicker: () => void;
   onToggleHighlightPicker: () => void;
+  onToggleThemePicker: () => void;
   colorButtonRef: RefObject<HTMLDivElement | null>;
   highlightButtonRef: RefObject<HTMLDivElement | null>;
+  themeButtonRef: RefObject<HTMLDivElement | null>;
   onFontFamilyChange: (font: string) => void;
   onFontSizeChange: (size: number) => void;
   onBold: () => void;
@@ -55,6 +64,9 @@ type EditorToolbarProps = {
   onToolbarMouseDown: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onRestoreSelection: () => boolean;
   lineHeightValue: number;
+  themes: readonly ThemeOption[];
+  selectedTheme: string;
+  onThemeSelect: (themeName: string) => void;
 };
 
 const ALIGN_OPTIONS: AlignOption[] = ["left", "center", "right"];
@@ -83,10 +95,13 @@ export default function EditorToolbar({
   highlightOptions,
   isColorPickerOpen,
   isHighlightPickerOpen,
+  isThemePickerOpen,
   onToggleColorPicker,
   onToggleHighlightPicker,
+  onToggleThemePicker,
   colorButtonRef,
   highlightButtonRef,
+  themeButtonRef,
   onFontFamilyChange,
   onFontSizeChange,
   onBold,
@@ -102,66 +117,186 @@ export default function EditorToolbar({
   onToolbarMouseDown,
   onRestoreSelection,
   lineHeightValue,
+  themes,
+  selectedTheme,
+  onThemeSelect,
 }: EditorToolbarProps) {
+  const themeButtonElementRef = useRef<HTMLButtonElement | null>(null);
+  const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number } | null>(null);
+
+  const updateDropdownPosition = () => {
+    if (!themeButtonElementRef.current || !isThemePickerOpen) {
+      setDropdownPosition(null);
+      return;
+    }
+
+    const rect = themeButtonElementRef.current.getBoundingClientRect();
+
+    // Position below button with 8px offset (using fixed positioning, no scroll offset needed)
+    let top = rect.bottom + 8;
+    let left = rect.left;
+
+    // Viewport constraints with 8px padding
+    const viewportHeight = window.innerHeight;
+    const viewportWidth = window.innerWidth;
+    const dropdownHeight = 200; // Approximate height
+    const dropdownWidth = 180; // min-width from CSS
+
+    // Check if dropdown would overflow bottom
+    if (rect.bottom + dropdownHeight + 8 > viewportHeight - 8) {
+      // Position above button instead
+      top = rect.top - dropdownHeight - 8;
+      // Ensure it doesn't go above viewport
+      if (top < 8) {
+        top = 8;
+      }
+    }
+
+    // Check if dropdown would overflow right
+    if (rect.left + dropdownWidth > viewportWidth - 8) {
+      left = viewportWidth - dropdownWidth - 8;
+    }
+
+    // Check if dropdown would overflow left
+    if (left < 8) {
+      left = 8;
+    }
+
+    setDropdownPosition({ top, left });
+  };
+
+  useEffect(() => {
+    if (isThemePickerOpen) {
+      // Small delay to ensure button is rendered
+      const timeoutId = setTimeout(() => {
+        updateDropdownPosition();
+      }, 0);
+      const handleResize = () => updateDropdownPosition();
+      const handleScroll = () => updateDropdownPosition();
+      window.addEventListener("resize", handleResize);
+      window.addEventListener("scroll", handleScroll, true);
+      return () => {
+        clearTimeout(timeoutId);
+        window.removeEventListener("resize", handleResize);
+        window.removeEventListener("scroll", handleScroll, true);
+      };
+    } else {
+      setDropdownPosition(null);
+    }
+  }, [isThemePickerOpen]);
+
+  const renderDropdown = () => {
+    if (!isThemePickerOpen || toolbarDisabled || !dropdownPosition) return null;
+
+    const dropdownContent = (
+      <div
+        className={styles.themeDropdown}
+        style={{
+          top: `${dropdownPosition.top}px`,
+          left: `${dropdownPosition.left}px`,
+        }}
+      >
+        {themes.map((theme) => {
+          const isActive = selectedTheme === theme.name;
+          return (
+            <button
+              key={theme.name}
+              type="button"
+              className={`${styles.themeDropdownItem} ${isActive ? styles.themeDropdownItemActive : ""}`}
+              onClick={() => {
+                onThemeSelect(theme.name);
+                onToggleThemePicker();
+              }}
+              aria-pressed={isActive}
+            >
+              <span className={styles.themeDropdownSwatch} style={{ background: theme.swatch }} />
+              <span>{theme.name}</span>
+            </button>
+          );
+        })}
+      </div>
+    );
+
+    return typeof window !== "undefined" ? createPortal(dropdownContent, document.body) : null;
+  };
+
   return (
-    <div className={styles.toolbarRow}>
-      <div className={styles.toolbar}>
-        <div className={`${styles.toolbarSection} ${styles.toolbarSectionGrow}`}>
-          <label className={styles.toolbarLabel} htmlFor="editor-font-selector">
-            Font
-          </label>
-          <select
-            id="editor-font-selector"
-            className={styles.toolbarSelect}
-            value={commandState.fontFamily}
-            onFocus={onRestoreSelection}
-            onChange={(event) => onFontFamilyChange(event.target.value)}
-            aria-label="Font family"
-            disabled={toolbarDisabled}
-          >
-            {fontFamilies.map((family) => (
-              <option key={family} value={family}>
-                {family}
-              </option>
-            ))}
-          </select>
-          <label className={styles.toolbarLabel} htmlFor="editor-font-size">
-            Size
-          </label>
-          <select
-            id="editor-font-size"
-            className={styles.toolbarSelect}
-            value={commandState.fontSize}
-            onFocus={onRestoreSelection}
-            onChange={(event) => onFontSizeChange(Number(event.target.value))}
-            aria-label="Font size"
-            disabled={toolbarDisabled}
-          >
-            {fontSizes.map((size) => (
-              <option key={size} value={size}>
-                {size}
-              </option>
-            ))}
-          </select>
-          <label className={styles.toolbarLabel} htmlFor="editor-line-height">
-            Spacing
-          </label>
-          <select
-            id="editor-line-height"
-            className={styles.toolbarSelect}
-            value={String(lineHeightValue)}
-            onFocus={onRestoreSelection}
-            onChange={(event) => onLineHeightChange(Number(event.target.value))}
-            aria-label="Line spacing"
-            disabled={toolbarDisabled}
-          >
-            {lineSpacingOptions.map((spacing) => (
-              <option key={spacing} value={spacing}>
-                {spacing}
-              </option>
-            ))}
-          </select>
-        </div>
+    <>
+      <div className={styles.toolbarRow}>
+        <div className={styles.toolbar}>
+          <div className={`${styles.toolbarSection} ${styles.toolbarSectionGrow}`}>
+            <label className={styles.toolbarLabel} htmlFor="editor-font-selector">
+              Font
+            </label>
+            <select
+              id="editor-font-selector"
+              className={styles.toolbarSelect}
+              value={commandState.fontFamily}
+              onFocus={onRestoreSelection}
+              onChange={(event) => onFontFamilyChange(event.target.value)}
+              aria-label="Font family"
+              disabled={toolbarDisabled}
+            >
+              {fontFamilies.map((family) => (
+                <option key={family} value={family}>
+                  {family}
+                </option>
+              ))}
+            </select>
+            <label className={styles.toolbarLabel} htmlFor="editor-font-size">
+              Size
+            </label>
+            <select
+              id="editor-font-size"
+              className={styles.toolbarSelect}
+              value={commandState.fontSize}
+              onFocus={onRestoreSelection}
+              onChange={(event) => onFontSizeChange(Number(event.target.value))}
+              aria-label="Font size"
+              disabled={toolbarDisabled}
+            >
+              {fontSizes.map((size) => (
+                <option key={size} value={size}>
+                  {size}
+                </option>
+              ))}
+            </select>
+            <label className={styles.toolbarLabel} htmlFor="editor-line-height">
+              Spacing
+            </label>
+            <select
+              id="editor-line-height"
+              className={styles.toolbarSelect}
+              value={String(lineHeightValue)}
+              onFocus={onRestoreSelection}
+              onChange={(event) => onLineHeightChange(Number(event.target.value))}
+              aria-label="Line spacing"
+              disabled={toolbarDisabled}
+            >
+              {lineSpacingOptions.map((spacing) => (
+                <option key={spacing} value={spacing}>
+                  {spacing}
+                </option>
+              ))}
+            </select>
+
+            <div className={styles.toolbarGroup} ref={themeButtonRef}>
+              <label className={styles.toolbarLabel}>Theme</label>
+              <button
+                ref={themeButtonElementRef}
+                type="button"
+                className={styles.toolbarThemeButton}
+                onMouseDown={onToolbarMouseDown}
+                onClick={onToggleThemePicker}
+                aria-expanded={isThemePickerOpen}
+                aria-label="Select theme"
+                disabled={toolbarDisabled}
+              >
+                <span>{themes.find((t) => t.name === selectedTheme)?.name || "Theme"}</span>
+                <span className={styles.toolbarThemeArrow}>{isThemePickerOpen ? "▲" : "▼"}</span>
+              </button>
+            </div>
+          </div>
 
         <div className={styles.toolbarDivider} role="separator" />
 
@@ -349,6 +484,8 @@ export default function EditorToolbar({
         </div>
       </div>
     </div>
+      {renderDropdown()}
+    </>
   );
 }
 
