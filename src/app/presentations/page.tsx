@@ -1,28 +1,24 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode, type MouseEvent } from "react";
 import { useRouter } from "next/navigation";
+import { signOut } from "firebase/auth";
+import { auth } from "@/lib/firebase";
 import TeamChatWidget from "@/components/TeamChatWidget";
 import styles from "./presentations.module.css";
+import { createPresentation } from "@/lib/mockPresentationsApi";
 import {
-  type PresentationRecord,
-  createPresentation,
-  fetchPresentations,
-} from "@/lib/mockPresentationsApi";
+  readPresentationMeta,
+  recordPresentationDraft,
+  PRESENTATION_META_UPDATED_EVENT,
+  type PresentationMeta,
+} from "@/lib/presentationMeta";
+import { useAuth } from "@/context/AuthContext";
 
 type TemplateCard = {
   id: string;
   title: string;
   icon: ReactNode;
-};
-
-type RecentPresentation = {
-  id: string;
-  title: string;
-  date: string;
-  thumbAccent: string;
-  shared?: boolean;
-  type?: "P" | "G";
 };
 
 const templates: TemplateCard[] = [
@@ -116,10 +112,52 @@ const templates: TemplateCard[] = [
 
 export default function PresentationsHome() {
   const router = useRouter();
+  const { user, loading } = useAuth();
   const [isDark, setIsDark] = useState(false);
-  const [recentCards, setRecentCards] = useState<RecentPresentation[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [presentationMeta, setPresentationMeta] = useState<PresentationMeta[]>([]);
+  const [searchInput, setSearchInput] = useState("");
+  const [query, setQuery] = useState("");
+  const savedPresentations = useMemo(
+    () => presentationMeta.filter((item) => item.isSaved),
+    [presentationMeta]
+  );
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setQuery(searchInput);
+    }, 300);
+    return () => window.clearTimeout(timeoutId);
+  }, [searchInput]);
+
+  const visiblePresentations = useMemo(() => {
+    const trimmed = query.trim().toLowerCase();
+    if (!trimmed) return savedPresentations;
+    return savedPresentations.filter((item) => {
+      const indexSource =
+        item.searchIndex?.toLowerCase() ?? `${item.title ?? ""}`.toLowerCase();
+      return indexSource.includes(trimmed);
+    });
+  }, [query, savedPresentations]);
+
+  const highlightMatch = useCallback(
+    (text: string): ReactNode => {
+      const trimmed = query.trim();
+      if (!trimmed) return text;
+      const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const regex = new RegExp(`(${escaped})`, "ig");
+      const parts = text.split(regex);
+      return parts.map((part, index) =>
+        part.toLowerCase() === trimmed.toLowerCase() ? (
+          <mark key={`${part}-${index}`} className={styles.highlight}>
+            {part}
+          </mark>
+        ) : (
+          <span key={`${part}-${index}`}>{part}</span>
+        )
+      );
+    },
+    [query]
+  );
 
   useEffect(() => {
     const saved = typeof window !== "undefined" ? localStorage.getItem("theme") : null;
@@ -140,40 +178,34 @@ export default function PresentationsHome() {
     }
   }, [isDark]);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadPresentations = async () => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const records = await fetchPresentations();
-        if (!cancelled) {
-          setRecentCards(records.map(mapRecordToCard));
-        }
-      } catch (err) {
-        if (!cancelled) {
-          console.error("Failed to load presentations", err);
-          setError("We couldn’t load your presentations right now. Please try again shortly.");
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    void loadPresentations();
-
-    return () => {
-      cancelled = true;
-    };
+  const refreshPresentationMeta = useCallback(() => {
+    setPresentationMeta(readPresentationMeta());
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    refreshPresentationMeta();
+    const handleMetaUpdate = () => refreshPresentationMeta();
+    window.addEventListener(PRESENTATION_META_UPDATED_EVENT, handleMetaUpdate);
+    return () => {
+      window.removeEventListener(PRESENTATION_META_UPDATED_EVENT, handleMetaUpdate);
+    };
+  }, [refreshPresentationMeta]);
 
   const toggleTheme = () => setIsDark((value) => !value);
 
-  const goToPresentation = (presentationId: string) => {
+  const goToPresentation = (presentationId: string, title?: string) => {
     router.push(`/editor?presentationId=${encodeURIComponent(presentationId)}&slideId=slide-1`);
+  };
+
+  const goToDashboard = (event?: MouseEvent<HTMLElement>) => {
+    event?.stopPropagation();
+    try {
+      localStorage.setItem("pmodeEntry", "dashboard");
+    } catch {
+      // no-op
+    }
+    router.push("/dashboard");
   };
 
   const handleBlankClick = async () => {
@@ -196,24 +228,15 @@ export default function PresentationsHome() {
 
     try {
       await createPresentation(newPresentation);
-      setRecentCards((prev) => [mapRecordToCard(newPresentation), ...prev]);
+      recordPresentationDraft(presentationId, newPresentation.title);
       router.push(`/editor?presentationId=${encodeURIComponent(presentationId)}&slideId=slide-1`);
     } catch (err) {
       console.error("Failed to create presentation", err);
-      setError("We couldn’t create your presentation. Please try again.");
     }
-  };
-
-  const handleTeamUpdateClick = () => {
-    router.push("/audit-log");
   };
 
   const handleTrainingClick = () => {
     router.push("/training-deck");
-  };
-
-  const handleExecutiveSummaryClick = () => {
-    router.push("/executive-summary");
   };
 
   return (
@@ -222,10 +245,7 @@ export default function PresentationsHome() {
         <div className={styles.logoWrap}>
           <img src="/aramco-digital.png" alt="Aramco Digital" className={styles.logo} />
         </div>
-        <div className={styles.navLinks}>
-          <button type="button" className={styles.navLink} onClick={() => router.push("/#features")}>Features</button>
-          <button type="button" className={styles.navLink} onClick={() => router.push("/#security")}>Security</button>
-        </div>
+        <div className={styles.navLinks} />
         <div className={styles.topRightActions}>
           <button
             type="button"
@@ -249,12 +269,23 @@ export default function PresentationsHome() {
               </svg>
             )}
           </button>
-          <button type="button" className={styles.primary} onClick={() => router.push("/login")}>
-            Try Work Presentation
-          </button>
-          <button type="button" className={styles.secondary} onClick={() => router.push("/login")}>
-            Sign in
-          </button>
+          {!loading && !user ? (
+            <button type="button" className={styles.primary} onClick={() => router.push("/login")}>
+              Sign in
+            </button>
+          ) : null}
+          {!loading && user ? (
+            <button
+              type="button"
+              className={styles.secondary}
+              onClick={async () => {
+                await signOut(auth);
+                router.push("/login");
+              }}
+            >
+              Sign out
+            </button>
+          ) : null}
         </div>
       </nav>
 
@@ -262,7 +293,13 @@ export default function PresentationsHome() {
         <header className={styles.headerBar}>
           <h1 className={styles.heading}>Secure Presentations</h1>
           <div className={styles.searchWrap}>
-            <input className={styles.searchInput} placeholder="Search presentations…" aria-label="Search presentations" />
+            <input
+              className={styles.searchInput}
+              placeholder="Search presentations…"
+              aria-label="Search presentations"
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
+            />
           </div>
         </header>
 
@@ -276,15 +313,17 @@ export default function PresentationsHome() {
                 <article
                   key={template.id}
                   className={styles.templateCard}
-                  onClick={() => {
+                  onClick={(event) => {
                     if (template.id === "template-blank") {
                       void handleBlankClick();
                     } else if (template.id === "template-team-update") {
-                      handleTeamUpdateClick();
+                      goToDashboard(event);
+                    } else if (template.id === "template-project-review") {
+                      goToDashboard(event);
                     } else if (template.id === "template-training") {
                       handleTrainingClick();
                     } else if (template.id === "template-executive") {
-                      handleExecutiveSummaryClick();
+                      goToDashboard(event);
                     } else {
                       goToPresentation(template.id);
                     }
@@ -299,48 +338,31 @@ export default function PresentationsHome() {
             </div>
           </section>
 
-          <section className={styles.recentsSection}>
+          <section className={styles.recentsSection} aria-label="Recent presentations">
             <div className={styles.recentsHeader}>
               <h2>Recent presentations</h2>
             </div>
 
-            {isLoading ? (
-              <div className={styles.emptyState}>Loading your presentations…</div>
-            ) : error ? (
-              <div className={styles.emptyState}>{error}</div>
-            ) : recentCards.length === 0 ? (
-              <div className={styles.emptyState}>You haven’t created any presentations yet.</div>
-            ) : (
-              <div className={styles.recentGrid}>
-                {recentCards.map((item) => (
-                  <article
-                    key={item.id}
-                    className={styles.recentCard}
-                    onClick={() => goToPresentation(item.id)}
-                  >
-                    <div className={styles.recentThumb} style={{ background: item.thumbAccent }}>
-                      <span className={styles.fileBadge}>{item.type ?? "P"}</span>
-                    </div>
-                    <div className={styles.recentMeta}>
-                      <h3>{item.title}</h3>
-                      <p>{item.date}</p>
-                      {item.shared ? <span className={styles.sharedLabel}>Shared with you</span> : null}
-                    </div>
-                    <button
-                      className={styles.cardMenu}
-                      type="button"
-                      aria-label="More actions"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        goToPresentation(item.id);
-                      }}
-                    >
-                      ⋮
-                    </button>
-                  </article>
-                ))}
-              </div>
-            )}
+          {savedPresentations.length === 0 ? (
+            <div className={styles.emptyState}>No recent presentations yet.</div>
+          ) : visiblePresentations.length === 0 ? (
+            <div className={styles.emptyState}>No presentations match your search.</div>
+          ) : (
+            <div className={styles.recentGrid}>
+              {visiblePresentations.map((item) => (
+                <article
+                  key={item.id}
+                  className={styles.recentCard}
+                  onClick={() => goToPresentation(item.id, item.title)}
+                >
+                  <div className={styles.recentMeta}>
+                    <h3>{highlightMatch(item.title || "Untitled presentation")}</h3>
+                    {item.updatedAt ? <p>{item.updatedAt}</p> : null}
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
           </section>
         </main>
 
@@ -350,21 +372,4 @@ export default function PresentationsHome() {
       </div>
     </>
   );
-}
-
-function mapRecordToCard(record: PresentationRecord): RecentPresentation {
-  const displayDate = new Date(record.lastUpdated).toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-
-  return {
-    id: record.presentationId,
-    title: record.title || "Untitled presentation",
-    date: displayDate,
-    thumbAccent: "linear-gradient(135deg, #7ccba2, #e2f7ec)",
-    type: "P",
-    shared: record.owner !== "Current User" && record.owner !== "You",
-  };
 }

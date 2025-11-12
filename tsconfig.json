@@ -19,7 +19,8 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "firebase/auth": ["./src/lib/firebaseAuth"]
     }
   },
   "include": [

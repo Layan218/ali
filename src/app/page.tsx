@@ -1,11 +1,16 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { signOut } from "firebase/auth";
+import { auth } from "@/lib/firebase";
+import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/hooks/useTheme";
 import styles from "./page.module.css";
 
 export default function Home() {
   const router = useRouter();
+  const pathname = usePathname();
+  const { user, loading } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const features = [
     {
@@ -72,10 +77,12 @@ export default function Home() {
         <div className={styles.logoWrap}>
           <img src="/aramco-digital.png" alt="Aramco Digital" className={styles.logo} />
         </div>
-        <div className={styles.navLinks}>
-          <a href="#features" className={styles.navLink}>Features</a>
-          <a href="#security" className={styles.navLink}>Security</a>
-        </div>
+        {pathname === "/" ? (
+          <div className={styles.navLinks}>
+            <a href="#features" className={styles.navLink}>Features</a>
+            <a href="#security" className={styles.navLink}>Security</a>
+          </div>
+        ) : <div />}
         <div className={styles.topRightActions}>
           <button
             type="button"
@@ -96,20 +103,27 @@ export default function Home() {
               </svg>
             )}
           </button>
-          <button
-            type="button"
-            className={styles.primary}
-            onClick={() => router.push("/login")}
-          >
-            Try Work Presentation
-          </button>
-          <button
-            type="button"
-            className={styles.secondary}
-            onClick={() => router.push("/login")}
-          >
-            Sign in
-          </button>
+          {!loading && !user ? (
+            <button
+              type="button"
+              className={styles.primary}
+              onClick={() => router.push("/login")}
+            >
+              Sign in
+            </button>
+          ) : null}
+          {!loading && user ? (
+            <button
+              type="button"
+              className={styles.secondary}
+              onClick={async () => {
+                await signOut(auth);
+                router.push("/login");
+              }}
+            >
+              Sign out
+            </button>
+          ) : null}
         </div>
       </nav>
 
@@ -120,14 +134,13 @@ export default function Home() {
           <p className={styles.description}>
             You can create and present secure, professional presentations directly in your browser — exclusively for Aramco Digital.
           </p>
-          <div className={styles.actions}>
-            <button type="button" className={styles.primary} onClick={() => router.push("/login")}>
-              Try Work Presentation
-            </button>
-            <button type="button" className={styles.secondary} onClick={() => router.push("/login")}>
-              Sign in
-            </button>
-          </div>
+          {!loading && !user ? (
+            <div className={styles.actions}>
+              <button type="button" className={styles.primary} onClick={() => router.push("/login")}>
+                Sign in
+              </button>
+            </div>
+          ) : null}
         </div>
       </main>
 

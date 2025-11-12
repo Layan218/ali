@@ -1,7 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { signOut } from "firebase/auth";
+import { auth } from "@/lib/firebase";
 import { useTheme } from "@/hooks/useTheme";
+import { useAuth } from "@/context/AuthContext";
 import styles from "./slides.module.css";
 
 type TemplateCard = {
@@ -56,6 +59,7 @@ const recents: RecentPresentation[] = [
 
 export default function SlidesHome() {
   const { theme, toggleTheme } = useTheme();
+  const { user, loading } = useAuth();
   const router = useRouter();
 
   const handleTemplateSelect = (template: TemplateCard) => {
@@ -71,10 +75,7 @@ export default function SlidesHome() {
         <div className={styles.logoWrap}>
           <img src="/aramco-digital.png" alt="Aramco Digital" className={styles.logo} />
         </div>
-        <div className={styles.navLinks}>
-          <a href="#features" className={styles.navLink}>Features</a>
-          <a href="#security" className={styles.navLink}>Security</a>
-        </div>
+        <div className={styles.navLinks} />
         <div className={styles.topRightActions}>
           <button
             type="button"
@@ -93,8 +94,23 @@ export default function SlidesHome() {
               </svg>
             )}
           </button>
-          <a className={styles.primary} href="#">Try Work Presentation</a>
-          <a className={styles.secondary} href="/login">Sign in</a>
+          {!loading && !user ? (
+            <button className={styles.primary} type="button" onClick={() => router.push("/login")}>
+              Sign in
+            </button>
+          ) : null}
+          {!loading && user ? (
+            <button
+              className={styles.secondary}
+              type="button"
+              onClick={async () => {
+                await signOut(auth);
+                router.push("/login");
+              }}
+            >
+              Sign out
+            </button>
+          ) : null}
         </div>
       </nav>
 

@@ -7,6 +7,8 @@ import TeamChatWidget from "@/components/TeamChatWidget";
 import { useTheme } from "@/hooks/useTheme";
 import styles from "./dashboard.module.css";
 
+const VIEWER_RETURN_KEY = "viewer-return-url";
+
 type Slide = {
   id: string;
   title: string;
@@ -248,6 +250,12 @@ export default function DashboardPage() {
                               className={styles.ghostButton}
                               onClick={(event) => {
                                 event.stopPropagation();
+                                if (typeof window !== "undefined") {
+                                  window.sessionStorage.setItem(
+                                    VIEWER_RETURN_KEY,
+                                    `${window.location.pathname}${window.location.search}`
+                                  );
+                                }
                                 router.push("/viewer?presentationId=slide-ops-review&slideId=slide-1");
                               }}
                             >

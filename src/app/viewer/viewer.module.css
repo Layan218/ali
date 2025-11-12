@@ -158,6 +158,17 @@
   gap: 16px;
 }
 
+.footerRight {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fullscreenButton {
+  padding: 10px 18px;
+  font-size: 14px;
+}
+
 .navButton {
   border: none;
   border-radius: 999px;

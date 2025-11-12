@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Calistoga, Inter } from "next/font/google";
 import "./globals.css";
+import { AuthProvider } from "@/context/AuthContext";
 
 const calistoga = Calistoga({
   weight: "400",
@@ -22,7 +23,9 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className={`${calistoga.variable} ${inter.variable}`}>{children}</body>
+      <body className={`${calistoga.variable} ${inter.variable}`}>
+        <AuthProvider>{children}</AuthProvider>
+      </body>
     </html>
   );
 }

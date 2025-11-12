@@ -40,6 +40,14 @@ export default function LoginPage() {
     setIsSubmitting(true);
     try {
       await new Promise((r) => setTimeout(r, 500));
+      if (typeof window !== "undefined") {
+        const payload = { email };
+        window.localStorage.setItem("authUser", JSON.stringify(payload));
+        window.dispatchEvent(
+          new StorageEvent("storage", { key: "authUser", storageArea: window.localStorage })
+        );
+        window.dispatchEvent(new Event("auth:updated"));
+      }
       router.push("/presentations");
     } catch {
       setError("Login failed. Please try again.");

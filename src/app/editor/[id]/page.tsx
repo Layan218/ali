@@ -4,9 +4,20 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, FormEvent } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { signOut } from "firebase/auth";
+import { auth } from "@/lib/firebase";
+import { useAuth } from "@/context/AuthContext";
 import TeamChatWidget from "@/components/TeamChatWidget";
 import styles from "./editor.module.css";
 import EditorToolbar from "@/components/EditorToolbar";
+import {
+  markPresentationSaved,
+  readPresentationMeta,
+  updatePresentationStatus,
+} from "@/lib/presentationMeta";
+
+const VIEWER_RETURN_KEY = "viewer-return-url";
+const VIEWER_STATE_KEY = "viewer-state";
 
 const cx = (...classes: Array<string | false | null | undefined>) =>
   classes.filter(Boolean).join(" ");
@@ -187,6 +198,7 @@ const initialSlides: SlideData[] = [
 
 export default function EditorPage({ params }: { params: { id: string } }) {
   const router = useRouter();
+  const { user, loading } = useAuth();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const presentationId = searchParams.get("presentationId");
@@ -194,7 +206,9 @@ export default function EditorPage({ params }: { params: { id: string } }) {
   const [presentationTitle, setPresentationTitle] = useState(() => formatTitleFromId(params.id));
   const [slides, setSlides] = useState<SlideData[]>(initialSlides);
   const [selectedSlideId, setSelectedSlideId] = useState(initialSlides[0].id);
-  const [isFinal, setIsFinal] = useState(false);
+  const [status, setStatus] = useState<"draft" | "final">("draft");
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [statusToastVariant, setStatusToastVariant] = useState<"draft" | "final" | null>(null);
   const [activeField, setActiveField] = useState<FieldKey>("title");
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
   const [isHighlightPickerOpen, setIsHighlightPickerOpen] = useState(false);
@@ -507,12 +521,14 @@ export default function EditorPage({ params }: { params: { id: string } }) {
   };
 
   const handleContentFocus = (field: FieldKey) => {
+    if (isReadOnly) return;
     setActiveField(field);
     setIsColorPickerOpen(false);
     setIsHighlightPickerOpen(false);
   };
 
   const handleNotesChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+    if (isReadOnly) return;
     const value = event.target.value;
     updateSlideField("notes", value);
     autoResizeNotes(event.target);
@@ -648,12 +664,54 @@ export default function EditorPage({ params }: { params: { id: string } }) {
     });
   };
 
+  useEffect(() => {
+    if (!presentationId) return;
+    const meta = readPresentationMeta().find((item) => item.id === presentationId);
+    if (meta?.status === "final" || meta?.status === "draft") {
+      setStatus(meta.status);
+    }
+  }, [presentationId]);
+
+  useEffect(() => {
+    if (!statusMessage) return;
+    const timeoutId = window.setTimeout(() => {
+      setStatusMessage(null);
+      setStatusToastVariant(null);
+    }, 3000);
+    return () => window.clearTimeout(timeoutId);
+  }, [statusMessage]);
+
   const handleSaveSlide = () => {
     syncActiveFieldContent("title");
     syncActiveFieldContent("subtitle");
     if (notesRef.current) {
       updateSlideField("notes", notesRef.current.value);
     }
+    if (presentationId) {
+      const slideSummary = slides.map((slide) => ({
+        id: slide.id,
+        title: typeof slide.title === "string" ? slide.title : "",
+        subtitle: typeof slide.subtitle === "string" ? slide.subtitle : "",
+        notes: typeof slide.notes === "string" ? slide.notes : "",
+      }));
+      markPresentationSaved(presentationId, presentationTitle, slideSummary, status);
+    }
+  };
+
+  const applyStatusUpdate = (nextStatus: "draft" | "final", message: string) => {
+    if (!presentationId) return;
+    updatePresentationStatus(presentationId, nextStatus);
+    setStatus(nextStatus);
+    setStatusMessage(message);
+    setStatusToastVariant(nextStatus);
+  };
+
+  const markAsDraft = () => {
+    applyStatusUpdate("draft", "Status: Draft");
+  };
+
+  const markAsFinal = () => {
+    applyStatusUpdate("final", "Status: Finalized");
   };
 
   const handleDeleteSlide = () => {
@@ -715,7 +773,7 @@ export default function EditorPage({ params }: { params: { id: string } }) {
     setNewComment("");
   };
 
-  const toolbarDisabled = selectedSlide == null;
+  const toolbarDisabled = selectedSlide == null || status === "final";
 
   const highlightIndicatorStyle: CSSProperties =
     commandState.highlight === "transparent"
@@ -742,13 +800,26 @@ export default function EditorPage({ params }: { params: { id: string } }) {
   const handleOpenSlideshow = () => {
     const fallbackId = slides[0]?.id ?? "";
     const targetId = selectedSlideId || fallbackId;
-    if (targetId) {
-      const params = new URLSearchParams({ slideId: targetId });
-      if (presentationId) params.set("presentationId", presentationId);
-      router.push(`/viewer?${params.toString()}`);
-    } else {
-      router.push("/viewer");
+    if (typeof window !== "undefined") {
+      window.sessionStorage.setItem(VIEWER_RETURN_KEY, `${window.location.pathname}${window.location.search}`);
+      const viewerPayload = {
+        presentationId,
+        slideId: targetId,
+        presentationTitle,
+        slides: slides.map((slide) => ({
+          id: slide.id,
+          title: typeof slide.title === "string" ? slide.title : "",
+          subtitle: typeof slide.subtitle === "string" ? slide.subtitle : "",
+          notes: typeof slide.notes === "string" ? slide.notes : "",
+        })),
+      };
+      try {
+        window.sessionStorage.setItem(VIEWER_STATE_KEY, JSON.stringify(viewerPayload));
+      } catch (error) {
+        console.error("Failed to store viewer payload", error);
+      }
     }
+    router.push("/viewer");
   };
 
   const toggleColorPicker = () => setIsColorPickerOpen((prev) => !prev);
@@ -756,6 +827,8 @@ export default function EditorPage({ params }: { params: { id: string } }) {
   const toggleThemePicker = () => setIsThemePickerOpen((prev) => !prev);
   const currentLineHeight =
     currentFormatting[activeField]?.lineHeight ?? DEFAULT_FORMATTING[activeField]?.lineHeight ?? 1.2;
+
+  const isReadOnly = status === "final";
 
   return (
     <>
@@ -819,12 +892,23 @@ export default function EditorPage({ params }: { params: { id: string } }) {
               </svg>
             )}
           </button>
-          <a className={styles.primary} href="#">
-            Try Work Presentation
-          </a>
-          <a className={styles.secondary} href="/login">
-            Sign in
-          </a>
+          {!loading && !user ? (
+            <button className={styles.primary} type="button" onClick={() => router.push("/login")}>
+              Sign in
+            </button>
+          ) : null}
+          {!loading && user ? (
+            <button
+              className={styles.secondary}
+              type="button"
+              onClick={async () => {
+                await signOut(auth);
+                router.push("/login");
+              }}
+            >
+              Sign out
+            </button>
+          ) : null}
         </div>
       </nav>
 
@@ -842,31 +926,59 @@ export default function EditorPage({ params }: { params: { id: string } }) {
                         value={presentationTitle}
                         onChange={(event) => setPresentationTitle(event.target.value)}
                         aria-label="Presentation title"
+                        disabled={isReadOnly}
                       />
-                      <span className={`${styles.statusBadge} ${isFinal ? styles.statusFinal : styles.statusDraft}`}>
-                        {isFinal ? "Final" : "Draft"}
+                      <span
+                        className={`${styles.statusBadge} ${
+                          status === "final" ? styles.statusFinal : styles.statusDraft
+                        }`}
+                      >
+                        {status === "final" ? "Final" : "Draft"}
                       </span>
-                      <button type="button" className={styles.statusToggle} onClick={() => setIsFinal((value) => !value)}>
-                        {isFinal ? "Mark as Draft" : "Mark as Final"}
-                      </button>
+                      <div className={styles.statusActions}>
+                        <button
+                          type="button"
+                          className={styles.statusToggle}
+                          onClick={markAsDraft}
+                          disabled={status === "draft"}
+                        >
+                          Draft
+                        </button>
+                        <button
+                          type="button"
+                          className={`${styles.statusToggle} ${styles.statusTogglePrimary}`}
+                          onClick={markAsFinal}
+                          disabled={status === "final"}
+                        >
+                          Mark as Final
+                        </button>
+                      </div>
                     </div>
                     <span className={styles.productName}>Secure Presentation Tool</span>
                   </div>
                 </div>
+
+                {statusMessage ? (
+                  <div
+                    className={`${styles.statusToast} ${
+                      statusToastVariant === "final"
+                        ? styles.statusToastFinal
+                        : styles.statusToastDraft
+                    }`}
+                  >
+                    {statusToastVariant === "final" ? "🟢" : "🟡"} {statusMessage}
+                  </div>
+                ) : null}
 
                 <div className={styles.actions}>
                   <button
                     type="button"
                     className={styles.slideshowButton}
                     onClick={() => {
-                      if (presentationId) {
-                        router.push(`/dashboard?presentationId=${encodeURIComponent(presentationId)}`);
-                      } else {
-                        router.push("/dashboard");
-                      }
+                      router.push("/presentations");
                     }}
                   >
-                    Back to Dashboard
+                    Back to Home
                   </button>
                   <button type="button" className={styles.shareButton}>
                     Share
@@ -959,30 +1071,32 @@ export default function EditorPage({ params }: { params: { id: string } }) {
                 <section className={styles.canvasRegion}>
                   <div className={styles.canvasShell}>
                     <div className={styles.canvasSurface}>
-                      <div
-                        ref={titleRef}
-                        className={styles.slideTitleInput}
-                        contentEditable
-                        suppressContentEditableWarning
-                        role="textbox"
-                        aria-label="Slide title"
-                        onInput={() => handleContentInput("title")}
-                        onFocus={() => handleContentFocus("title")}
-                        onBlur={() => handleContentBlur("title")}
-                        style={getTextStyle("title")}
-                      />
-                      <div
-                        ref={subtitleRef}
-                        className={styles.slideSubtitleInput}
-                        contentEditable
-                        suppressContentEditableWarning
-                        role="textbox"
-                        aria-label="Slide subtitle"
-                        onInput={() => handleContentInput("subtitle")}
-                        onFocus={() => handleContentFocus("subtitle")}
-                        onBlur={() => handleContentBlur("subtitle")}
-                        style={getTextStyle("subtitle")}
-                      />
+                    <div
+                      ref={titleRef}
+                      className={styles.slideTitleInput}
+                      contentEditable={!isReadOnly}
+                      suppressContentEditableWarning
+                      role="textbox"
+                      aria-label="Slide title"
+                      onInput={() => handleContentInput("title")}
+                      onFocus={() => handleContentFocus("title")}
+                      onBlur={() => handleContentBlur("title")}
+                      style={getTextStyle("title")}
+                      data-readonly={isReadOnly}
+                    />
+                    <div
+                      ref={subtitleRef}
+                      className={styles.slideSubtitleInput}
+                      contentEditable={!isReadOnly}
+                      suppressContentEditableWarning
+                      role="textbox"
+                      aria-label="Slide subtitle"
+                      onInput={() => handleContentInput("subtitle")}
+                      onFocus={() => handleContentFocus("subtitle")}
+                      onBlur={() => handleContentBlur("subtitle")}
+                      style={getTextStyle("subtitle")}
+                      data-readonly={isReadOnly}
+                    />
                     </div>
                     <div className={styles.canvasActionBar}>
                       <button type="button" onClick={handleSaveSlide} className={`${styles.canvasActionButton} ${styles.canvasActionPrimary}`}>
@@ -1041,6 +1155,7 @@ export default function EditorPage({ params }: { params: { id: string } }) {
                         onInput={(event) => autoResizeNotes(event.currentTarget)}
                         aria-label="Slide notes"
                         placeholder="Click to add speaker notes"
+                        readOnly={isReadOnly}
                       />
                     </div>
                   </div>

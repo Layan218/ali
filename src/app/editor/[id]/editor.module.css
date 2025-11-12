@@ -202,6 +202,7 @@
   justify-content: flex-end;
   flex: 1 1 220px;
   min-width: 220px;
+  gap: 12px;
 }
 
 .shareButton,
@@ -341,6 +342,54 @@
   background: rgba(86, 193, 176, 0.18);
   border-color: rgba(86, 193, 176, 0.6);
   box-shadow: 0 6px 16px rgba(86, 193, 176, 0.2);
+}
+
+.statusToggle:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.statusTogglePrimary {
+  background: #2b6a64;
+  border-color: #2b6a64;
+  color: #ffffff;
+}
+
+.statusTogglePrimary:hover:not(:disabled) {
+  background: #1d4d49;
+  border-color: #1d4d49;
+}
+
+.statusActions {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.statusToast {
+  margin-top: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1d4d49;
+  border-left: 4px solid transparent;
+}
+
+.statusToastDraft {
+  background: rgba(250, 204, 21, 0.15);
+  border-left-color: #b7791f;
+  color: #92400e;
+}
+
+.statusToastFinal {
+  background: rgba(86, 193, 176, 0.16);
+  border-left-color: #2b6a64;
+  color: #1d4d49;
 }
 
 .toolbarRow {
@@ -942,6 +991,19 @@
   cursor: text;
 }
 
+.slideTitleInput[data-readonly="true"],
+.slideSubtitleInput[data-readonly="true"] {
+  cursor: not-allowed;
+  background: rgba(148, 163, 184, 0.12);
+  border-radius: 12px;
+  padding: 4px 8px;
+}
+
+.slideTitleInput[data-readonly="true"]:focus,
+.slideSubtitleInput[data-readonly="true"]:focus {
+  background: rgba(148, 163, 184, 0.12);
+}
+
 .slideTitleInput {
   font-size: clamp(28px, 3vw, 44px);
   font-weight: 600;
@@ -959,6 +1021,11 @@
   background: rgba(86, 193, 176, 0.08);
   border-radius: 12px;
   padding: 4px 8px;
+}
+
+.notesTextarea[readonly] {
+  background: rgba(148, 163, 184, 0.12);
+  cursor: not-allowed;
 }
 
 .actionBar {
