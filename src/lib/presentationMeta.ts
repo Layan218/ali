@@ -191,3 +191,54 @@ export const updatePresentationStatus = (id: string, status: "draft" | "final") 
   });
 };
 
+
+const EXECUTIVE_SUMMARY_STORAGE_PREFIX = "execSummary:";
+const EXECUTIVE_SUMMARY_UPDATED_EVENT = "executive-summary:updated";
+
+type ExecutiveSummaryRecord = {
+  title: string;
+  author: string;
+  summary: string;
+  updatedAt: number;
+};
+
+export async function getExecutiveSummary(
+  id: string
+): Promise<{ title?: string; author?: string; summary?: string; updatedAt?: number } | null> {
+  if (!id || typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(`${EXECUTIVE_SUMMARY_STORAGE_PREFIX}${id}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<ExecutiveSummaryRecord> | null;
+    if (!parsed) return null;
+    const { title, author, summary, updatedAt } = parsed;
+    return {
+      title: typeof title === "string" ? title : undefined,
+      author: typeof author === "string" ? author : undefined,
+      summary: typeof summary === "string" ? summary : undefined,
+      updatedAt: typeof updatedAt === "number" ? updatedAt : undefined,
+    };
+  } catch (error) {
+    console.error("Failed to load executive summary", error);
+    return null;
+  }
+}
+
+export async function setExecutiveSummary(
+  id: string,
+  data: { title: string; author: string; summary: string }
+): Promise<void> {
+  if (!id || typeof window === "undefined") return;
+  const record: ExecutiveSummaryRecord = {
+    title: data.title,
+    author: data.author,
+    summary: data.summary,
+    updatedAt: Date.now(),
+  };
+  try {
+    window.localStorage.setItem(`${EXECUTIVE_SUMMARY_STORAGE_PREFIX}${id}`, JSON.stringify(record));
+    window.dispatchEvent(new CustomEvent(EXECUTIVE_SUMMARY_UPDATED_EVENT, { detail: { id, record } }));
+  } catch (error) {
+    console.error("Failed to persist executive summary", error);
+  }
+}

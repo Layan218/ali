@@ -208,35 +208,61 @@ export default function PresentationsHome() {
     router.push("/dashboard");
   };
 
-  const handleBlankClick = async () => {
-    const presentationId = `presentation-${Date.now()}`;
-    const now = new Date();
-    const newPresentation: PresentationRecord = {
-      presentationId,
-      title: "Untitled presentation",
-      owner: "Current User",
-      lastUpdated: now.toISOString(),
-      status: "Draft",
-      slides: [
-        {
-          id: "slide-1",
-          title: "Click to add title",
-          subtitle: "Click to add subtitle",
-        },
-      ],
-    };
+  const goToAuditLog = (event?: MouseEvent<HTMLElement>) => {
+    event?.stopPropagation();
+    router.push("/audit-log");
+  };
 
-    try {
-      await createPresentation(newPresentation);
-      recordPresentationDraft(presentationId, newPresentation.title);
+  const createDraftPresentation = async () => {
+  const presentationId = `presentation-${Date.now()}`;
+  const now = new Date();
+  const newPresentation: PresentationRecord = {
+    presentationId,
+    title: "Untitled presentation",
+    owner: "Current User",
+    lastUpdated: now.toISOString(),
+    status: "Draft",
+    slides: [
+      {
+        id: "slide-1",
+        title: "Click to add title",
+        subtitle: "Click to add subtitle",
+      },
+    ],
+  };
+
+  try {
+    await createPresentation(newPresentation);
+    recordPresentationDraft(presentationId, newPresentation.title);
+    return presentationId;
+  } catch (err) {
+    console.error("Failed to create presentation", err);
+    return null;
+  }
+};
+
+const handleBlankClick = async () => {
+    const presentationId = await createDraftPresentation();
+    if (presentationId) {
       router.push(`/editor?presentationId=${encodeURIComponent(presentationId)}&slideId=slide-1`);
-    } catch (err) {
-      console.error("Failed to create presentation", err);
     }
   };
 
   const handleTrainingClick = () => {
     router.push("/training-deck");
+  };
+
+const handleExecutiveSummaryClick = async (event?: MouseEvent<HTMLElement>) => {
+    event?.stopPropagation();
+    let targetPresentationId = savedPresentations[0]?.id;
+
+    if (!targetPresentationId) {
+      targetPresentationId = await createDraftPresentation();
+    }
+
+    if (targetPresentationId) {
+      router.push(`/slides/${encodeURIComponent(targetPresentationId)}/executive-summary`);
+    }
   };
 
   return (
@@ -317,13 +343,13 @@ export default function PresentationsHome() {
                     if (template.id === "template-blank") {
                       void handleBlankClick();
                     } else if (template.id === "template-team-update") {
-                      goToDashboard(event);
+                      goToAuditLog(event);
                     } else if (template.id === "template-project-review") {
                       goToDashboard(event);
                     } else if (template.id === "template-training") {
                       handleTrainingClick();
                     } else if (template.id === "template-executive") {
-                      goToDashboard(event);
+                      void handleExecutiveSummaryClick(event);
                     } else {
                       goToPresentation(template.id);
                     }
