@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { demoSlides } from "@/data/demoSlides";
 import { useTheme } from "@/hooks/useTheme";
@@ -53,7 +53,7 @@ const normalizeSlide = (slide: ViewerSlide | DemoSlide | undefined): ViewerSlide
   };
 };
 
-export default function ViewerPage() {
+function ViewerContent() {
   useTheme();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -248,5 +248,13 @@ export default function ViewerPage() {
         </div>
       </footer>
     </div>
+  );
+}
+
+export default function ViewerPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: 24, fontFamily: "Calibri, Arial, sans-serif" }}>Loading viewer…</div>}>
+      <ViewerContent />
+    </Suspense>
   );
 }

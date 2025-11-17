@@ -6,7 +6,7 @@ import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import TeamChatWidget from "@/components/TeamChatWidget";
 import styles from "./presentations.module.css";
-import { createPresentation } from "@/lib/mockPresentationsApi";
+import { createPresentation, type PresentationRecord } from "@/lib/mockPresentationsApi";
 import {
   readPresentationMeta,
   recordPresentationDraft,
@@ -213,35 +213,35 @@ export default function PresentationsHome() {
     router.push("/audit-log");
   };
 
-  const createDraftPresentation = async () => {
-  const presentationId = `presentation-${Date.now()}`;
-  const now = new Date();
-  const newPresentation: PresentationRecord = {
-    presentationId,
-    title: "Untitled presentation",
-    owner: "Current User",
-    lastUpdated: now.toISOString(),
-    status: "Draft",
-    slides: [
-      {
-        id: "slide-1",
-        title: "Click to add title",
-        subtitle: "Click to add subtitle",
-      },
-    ],
+  const createDraftPresentation = async (): Promise<string | undefined> => {
+    const presentationId = `presentation-${Date.now()}`;
+    const now = new Date();
+    const newPresentation: PresentationRecord = {
+      presentationId,
+      title: "Untitled presentation",
+      owner: "Current User",
+      lastUpdated: now.toISOString(),
+      status: "Draft",
+      slides: [
+        {
+          id: "slide-1",
+          title: "Click to add title",
+          subtitle: "Click to add subtitle",
+        },
+      ],
+    };
+
+    try {
+      await createPresentation(newPresentation);
+      recordPresentationDraft(presentationId, newPresentation.title);
+      return presentationId;
+    } catch (err) {
+      console.error("Failed to create presentation", err);
+      return undefined;
+    }
   };
 
-  try {
-    await createPresentation(newPresentation);
-    recordPresentationDraft(presentationId, newPresentation.title);
-    return presentationId;
-  } catch (err) {
-    console.error("Failed to create presentation", err);
-    return null;
-  }
-};
-
-const handleBlankClick = async () => {
+  const handleBlankClick = async () => {
     const presentationId = await createDraftPresentation();
     if (presentationId) {
       router.push(`/editor?presentationId=${encodeURIComponent(presentationId)}&slideId=slide-1`);
@@ -252,9 +252,9 @@ const handleBlankClick = async () => {
     router.push("/training-deck");
   };
 
-const handleExecutiveSummaryClick = async (event?: MouseEvent<HTMLElement>) => {
+  const handleExecutiveSummaryClick = async (event?: MouseEvent<HTMLElement>) => {
     event?.stopPropagation();
-    let targetPresentationId = savedPresentations[0]?.id;
+    let targetPresentationId: string | undefined = savedPresentations[0]?.id;
 
     if (!targetPresentationId) {
       targetPresentationId = await createDraftPresentation();

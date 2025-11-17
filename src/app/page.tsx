@@ -104,22 +104,13 @@ export default function Home() {
             )}
           </button>
           {!loading && !user ? (
-            <>
-              <button
-                type="button"
-                className={styles.primary}
-                onClick={() => router.push("/login")}
-              >
-                Sign in
-              </button>
-              <button
-                type="button"
-                className={styles.secondary}
-                onClick={() => router.push("/login")}
-              >
-                Try Work Presentation
-              </button>
-            </>
+            <button
+              type="button"
+              className={styles.primary}
+              onClick={() => router.push("/login")}
+            >
+              Sign in
+            </button>
           ) : null}
           {!loading && user ? (
             <button
@@ -145,13 +136,8 @@ export default function Home() {
           </p>
           {!loading && !user ? (
             <div className={styles.actions}>
-              <button type="button" className={styles.primary} onClick={() => router.push("/login")}>Sign in</button>
-              <button
-                type="button"
-                className={styles.secondary}
-                onClick={() => router.push("/login")}
-              >
-                Try Work Presentation
+              <button type="button" className={styles.primary} onClick={() => router.push("/login")}>
+                Sign in
               </button>
             </div>
           ) : null}

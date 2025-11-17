@@ -59,6 +59,8 @@ type EditorToolbarProps = {
   onAlign: (align: AlignOption) => void;
   onList: (type: ListOption) => void;
   onLineHeightChange: (value: number) => void;
+  onLetterSpacingChange?: (value: number) => void;
+  letterSpacingValue?: number;
   onUndo: () => void;
   onRedo: () => void;
   onToolbarMouseDown: (event: React.MouseEvent<HTMLButtonElement>) => void;
@@ -112,6 +114,8 @@ export default function EditorToolbar({
   onAlign,
   onList,
   onLineHeightChange,
+  onLetterSpacingChange,
+  letterSpacingValue = 0,
   onUndo,
   onRedo,
   onToolbarMouseDown,
@@ -279,6 +283,28 @@ export default function EditorToolbar({
                 </option>
               ))}
             </select>
+            {onLetterSpacingChange && (
+              <>
+                <label className={styles.toolbarLabel} htmlFor="editor-letter-spacing">
+                  Letter
+                </label>
+                <select
+                  id="editor-letter-spacing"
+                  className={styles.toolbarSelect}
+                  value={String(letterSpacingValue)}
+                  onFocus={onRestoreSelection}
+                  onChange={(event) => onLetterSpacingChange(Number(event.target.value))}
+                  aria-label="Letter spacing"
+                  disabled={toolbarDisabled}
+                >
+                  {[-2, -1, 0, 1, 2, 3, 4, 5].map((spacing) => (
+                    <option key={spacing} value={spacing}>
+                      {spacing}px
+                    </option>
+                  ))}
+                </select>
+              </>
+            )}
 
             <div className={styles.toolbarGroup} ref={themeButtonRef}>
               <label className={styles.toolbarLabel}>Theme</label>

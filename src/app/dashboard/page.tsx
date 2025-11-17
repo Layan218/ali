@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import TeamChatWidget from "@/components/TeamChatWidget";
@@ -91,7 +91,7 @@ function describeAction(action: AuditLogEntry["action"]) {
   }
 }
 
-export default function DashboardPage() {
+function DashboardContent() {
   const { theme, toggleTheme } = useTheme();
   const pathname = usePathname();
   const router = useRouter();
@@ -326,6 +326,14 @@ export default function DashboardPage() {
 
       <footer className={styles.footer}>© 2025 Aramco Digital – Secure Presentation Tool</footer>
     </>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: 24, fontFamily: "Calibri, Arial, sans-serif" }}>Loading dashboard…</div>}>
+      <DashboardContent />
+    </Suspense>
   );
 }
 

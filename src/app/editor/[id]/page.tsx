@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, FormEvent } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { signOut } from "firebase/auth";
@@ -26,6 +27,27 @@ type AlignOption = "left" | "center" | "right";
 
 type SlideFormatting = Record<FieldKey, { lineHeight: number }>;
 
+type TitleStyle = {
+  fontFamily: string;
+  fontSize: number;
+  color: string;
+  bold: boolean;
+  italic: boolean;
+  letterSpacing: number;
+};
+
+type TitlePosition = {
+  x: number;
+  y: number;
+  zIndex: number;
+};
+
+type TitleAnimation = {
+  type: "none" | "fade-in" | "slide-in" | "marquee";
+  duration: number; // in seconds
+  loop: boolean;
+};
+
 type SlideData = {
   id: string;
   title: string;
@@ -33,6 +55,13 @@ type SlideData = {
   notes: string;
   theme: string;
   formatting: SlideFormatting;
+  titleStyle?: TitleStyle;
+  titlePosition?: TitlePosition;
+  titleAnimation?: TitleAnimation;
+  backgroundImage?: string;
+  backgroundColor?: string;
+  layout?: "title-only" | "title-subtitle" | "title-content" | "blank";
+  transition?: "none" | "fade" | "slide" | "zoom";
 };
 
 type ThemeOption = {
@@ -113,6 +142,27 @@ const DEFAULT_FORMATTING: SlideFormatting = {
   notes: { lineHeight: 1.4 },
 };
 
+const DEFAULT_TITLE_STYLE: TitleStyle = {
+  fontFamily: "Calibri",
+  fontSize: 48,
+  color: "#202124",
+  bold: false,
+  italic: false,
+  letterSpacing: 0,
+};
+
+const DEFAULT_TITLE_POSITION: TitlePosition = {
+  x: 0,
+  y: 0,
+  zIndex: 1,
+};
+
+const DEFAULT_TITLE_ANIMATION: TitleAnimation = {
+  type: "none",
+  duration: 1,
+  loop: false,
+};
+
 const createDefaultFormatting = (): SlideFormatting => ({
   title: { lineHeight: DEFAULT_FORMATTING.title.lineHeight },
   subtitle: { lineHeight: DEFAULT_FORMATTING.subtitle.lineHeight },
@@ -123,6 +173,27 @@ const ensureFormatting = (formatting?: SlideFormatting): SlideFormatting => ({
   title: { lineHeight: formatting?.title?.lineHeight ?? DEFAULT_FORMATTING.title.lineHeight },
   subtitle: { lineHeight: formatting?.subtitle?.lineHeight ?? DEFAULT_FORMATTING.subtitle.lineHeight },
   notes: { lineHeight: formatting?.notes?.lineHeight ?? DEFAULT_FORMATTING.notes.lineHeight },
+});
+
+const ensureTitleStyle = (style?: TitleStyle): TitleStyle => ({
+  fontFamily: style?.fontFamily ?? DEFAULT_TITLE_STYLE.fontFamily,
+  fontSize: style?.fontSize ?? DEFAULT_TITLE_STYLE.fontSize,
+  color: style?.color ?? DEFAULT_TITLE_STYLE.color,
+  bold: style?.bold ?? DEFAULT_TITLE_STYLE.bold,
+  italic: style?.italic ?? DEFAULT_TITLE_STYLE.italic,
+  letterSpacing: style?.letterSpacing ?? DEFAULT_TITLE_STYLE.letterSpacing,
+});
+
+const ensureTitlePosition = (position?: TitlePosition): TitlePosition => ({
+  x: position?.x ?? DEFAULT_TITLE_POSITION.x,
+  y: position?.y ?? DEFAULT_TITLE_POSITION.y,
+  zIndex: position?.zIndex ?? DEFAULT_TITLE_POSITION.zIndex,
+});
+
+const ensureTitleAnimation = (animation?: TitleAnimation): TitleAnimation => ({
+  type: animation?.type ?? DEFAULT_TITLE_ANIMATION.type,
+  duration: animation?.duration ?? DEFAULT_TITLE_ANIMATION.duration,
+  loop: animation?.loop ?? DEFAULT_TITLE_ANIMATION.loop,
 });
 
 const fieldKeyMap: Record<FieldKey, keyof SlideData> = {
@@ -177,6 +248,9 @@ const initialSlides: SlideData[] = [
     notes: "",
     theme: INITIAL_THEME,
     formatting: createDefaultFormatting(),
+    titleStyle: { ...DEFAULT_TITLE_STYLE },
+    titlePosition: { ...DEFAULT_TITLE_POSITION },
+    titleAnimation: { ...DEFAULT_TITLE_ANIMATION },
   },
   {
     id: "slide-2",
@@ -185,6 +259,9 @@ const initialSlides: SlideData[] = [
     notes: "",
     theme: INITIAL_THEME,
     formatting: createDefaultFormatting(),
+    titleStyle: { ...DEFAULT_TITLE_STYLE },
+    titlePosition: { ...DEFAULT_TITLE_POSITION },
+    titleAnimation: { ...DEFAULT_TITLE_ANIMATION },
   },
   {
     id: "slide-3",
@@ -193,6 +270,9 @@ const initialSlides: SlideData[] = [
     notes: "",
     theme: INITIAL_THEME,
     formatting: createDefaultFormatting(),
+    titleStyle: { ...DEFAULT_TITLE_STYLE },
+    titlePosition: { ...DEFAULT_TITLE_POSITION },
+    titleAnimation: { ...DEFAULT_TITLE_ANIMATION },
   },
 ];
 
@@ -213,9 +293,22 @@ export default function EditorPage({ params }: { params: { id: string } }) {
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
   const [isHighlightPickerOpen, setIsHighlightPickerOpen] = useState(false);
   const [isThemePickerOpen, setIsThemePickerOpen] = useState(false);
+  const [isImagePickerOpen, setIsImagePickerOpen] = useState(false);
+  const [isBackgroundPickerOpen, setIsBackgroundPickerOpen] = useState(false);
+  const [isLayoutPickerOpen, setIsLayoutPickerOpen] = useState(false);
+  const [isTransitionPickerOpen, setIsTransitionPickerOpen] = useState(false);
   const [comments, setComments] = useState<CommentItem[]>(initialComments);
   const [newComment, setNewComment] = useState("");
   const storageKey = useMemo(() => `presentation-${params.id}-slides`, [params.id]);
+  
+  // Undo/Redo history
+  const [history, setHistory] = useState<SlideData[][]>([initialSlides]);
+  const [historyIndex, setHistoryIndex] = useState(0);
+  
+  // Animation state
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [animationPaused, setAnimationPaused] = useState(false);
+  const animationRef = useRef<number | null>(null);
 
   const colorButtonRef = useRef<HTMLDivElement | null>(null);
   const highlightButtonRef = useRef<HTMLDivElement | null>(null);
@@ -225,6 +318,64 @@ export default function EditorPage({ params }: { params: { id: string } }) {
   const notesRef = useRef<HTMLTextAreaElement | null>(null);
   const selectionRef = useRef<Range | null>(null);
   const hasHydratedRef = useRef(false);
+
+  const isReadOnly = status === "final";
+
+  // History management - defined early so it can be used in other callbacks
+  const saveToHistory = useCallback((newSlides: SlideData[]) => {
+    setHistory((prev) => {
+      const newHistory = prev.slice(0, historyIndex + 1);
+      newHistory.push(JSON.parse(JSON.stringify(newSlides))); // Deep clone
+      return newHistory.slice(-50); // Keep last 50 states
+    });
+    setHistoryIndex((prev) => Math.min(prev + 1, 49));
+  }, [historyIndex]);
+
+  // Update callbacks - defined early so they can be used in useEffects
+  const updateSlideTitleStyle = useCallback((updates: Partial<TitleStyle>) => {
+    setSlides((prev) => {
+      const newSlides = prev.map((slide) => {
+        if (slide.id !== selectedSlideId) return slide;
+        const currentStyle = ensureTitleStyle(slide.titleStyle);
+        return {
+          ...slide,
+          titleStyle: { ...currentStyle, ...updates },
+        };
+      });
+      saveToHistory(newSlides);
+      return newSlides;
+    });
+  }, [selectedSlideId, saveToHistory]);
+
+  const updateSlideTitlePosition = useCallback((updates: Partial<TitlePosition>) => {
+    setSlides((prev) => {
+      const newSlides = prev.map((slide) => {
+        if (slide.id !== selectedSlideId) return slide;
+        const currentPosition = ensureTitlePosition(slide.titlePosition);
+        return {
+          ...slide,
+          titlePosition: { ...currentPosition, ...updates },
+        };
+      });
+      saveToHistory(newSlides);
+      return newSlides;
+    });
+  }, [selectedSlideId, saveToHistory]);
+
+  const updateSlideTitleAnimation = useCallback((updates: Partial<TitleAnimation>) => {
+    setSlides((prev) => {
+      const newSlides = prev.map((slide) => {
+        if (slide.id !== selectedSlideId) return slide;
+        const currentAnimation = ensureTitleAnimation(slide.titleAnimation);
+        return {
+          ...slide,
+          titleAnimation: { ...currentAnimation, ...updates },
+        };
+      });
+      saveToHistory(newSlides);
+      return newSlides;
+    });
+  }, [selectedSlideId, saveToHistory]);
 
   const [commandState, setCommandState] = useState<CommandState>({
     fontFamily: "Calibri",
@@ -284,8 +435,13 @@ export default function EditorPage({ params }: { params: { id: string } }) {
         notes: slide.notes ?? "",
         theme: slide.theme ?? themes[0]?.name ?? DEFAULT_THEME,
         formatting: ensureFormatting(slide.formatting),
+        titleStyle: ensureTitleStyle(slide.titleStyle),
+        titlePosition: ensureTitlePosition(slide.titlePosition),
+        titleAnimation: ensureTitleAnimation(slide.titleAnimation),
       }));
       setSlides(normalized);
+      setHistory([normalized]); // Initialize history with loaded slides
+      setHistoryIndex(0);
       setSelectedSlideId((current) => {
         if (normalized.some((slide) => slide.id === current)) {
           return current;
@@ -339,11 +495,51 @@ export default function EditorPage({ params }: { params: { id: string } }) {
   }, [isThemePickerOpen]);
 
   useEffect(() => {
+    if (!isBackgroundPickerOpen) return;
+    const handleClickAway = (event: MouseEvent) => {
+      setIsBackgroundPickerOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickAway);
+    return () => document.removeEventListener("mousedown", handleClickAway);
+  }, [isBackgroundPickerOpen]);
+
+  useEffect(() => {
+    if (!isLayoutPickerOpen) return;
+    const handleClickAway = (event: MouseEvent) => {
+      setIsLayoutPickerOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickAway);
+    return () => document.removeEventListener("mousedown", handleClickAway);
+  }, [isLayoutPickerOpen]);
+
+  useEffect(() => {
+    if (!isTransitionPickerOpen) return;
+    const handleClickAway = (event: MouseEvent) => {
+      setIsTransitionPickerOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickAway);
+    return () => document.removeEventListener("mousedown", handleClickAway);
+  }, [isTransitionPickerOpen]);
+
+  useEffect(() => {
     if (!selectedSlide) return;
     const formatting = selectedSlide.formatting ?? DEFAULT_FORMATTING;
+    const titleStyle = ensureTitleStyle(selectedSlide.titleStyle);
+    const titlePosition = ensureTitlePosition(selectedSlide.titlePosition);
+    
     if (titleRef.current) {
       titleRef.current.innerHTML = selectedSlide.title || placeholderMap.title;
       titleRef.current.style.lineHeight = `${formatting.title.lineHeight}`;
+      titleRef.current.style.fontFamily = titleStyle.fontFamily;
+      titleRef.current.style.fontSize = `${titleStyle.fontSize}px`;
+      titleRef.current.style.color = titleStyle.color;
+      titleRef.current.style.fontWeight = titleStyle.bold ? "bold" : "normal";
+      titleRef.current.style.fontStyle = titleStyle.italic ? "italic" : "normal";
+      titleRef.current.style.letterSpacing = `${titleStyle.letterSpacing}px`;
+      titleRef.current.style.transform = `translate(${titlePosition.x}px, ${titlePosition.y}px)`;
+      titleRef.current.style.zIndex = titlePosition.zIndex.toString();
+      titleRef.current.style.position = "relative";
+      titleRef.current.style.cursor = isReadOnly ? "default" : "move";
     }
     if (subtitleRef.current) {
       subtitleRef.current.innerHTML = selectedSlide.subtitle || placeholderMap.subtitle;
@@ -352,7 +548,7 @@ export default function EditorPage({ params }: { params: { id: string } }) {
     if (notesRef.current) {
       notesRef.current.style.lineHeight = `${formatting.notes.lineHeight}`;
     }
-  }, [selectedSlide]);
+  }, [selectedSlide, isReadOnly]);
 
   useEffect(() => {
     const handleSelectionChange = () => {
@@ -449,6 +645,23 @@ export default function EditorPage({ params }: { params: { id: string } }) {
   };
 
   const syncCommandState = () => {
+    if (activeField === "title" && selectedSlide) {
+      const titleStyle = ensureTitleStyle(selectedSlide.titleStyle);
+      setCommandState((prev) => ({
+        ...prev,
+        fontFamily: titleStyle.fontFamily,
+        fontSize: titleStyle.fontSize,
+        bold: titleStyle.bold,
+        italic: titleStyle.italic,
+        underline: false,
+        color: titleStyle.color,
+        highlight: "transparent",
+        align: "left",
+        listType: "none",
+      }));
+      return;
+    }
+
     if (!isEditableField) {
       setCommandState((prev) => ({
         ...prev,
@@ -545,6 +758,10 @@ export default function EditorPage({ params }: { params: { id: string } }) {
     el.style.height = `${Math.min(Math.max(el.scrollHeight, 80), 400)}px`;
   };
 
+  const toggleColorPicker = () => setIsColorPickerOpen((prev) => !prev);
+  const toggleHighlightPicker = () => setIsHighlightPickerOpen((prev) => !prev);
+  const toggleThemePicker = () => setIsThemePickerOpen((prev) => !prev);
+
   const handleThemeSelect = useCallback(
     (themeName: string) => {
       setSlides((prev) =>
@@ -568,22 +785,65 @@ export default function EditorPage({ params }: { params: { id: string } }) {
   }, [selectedSlideId, selectedSlide?.notes]);
 
   const applyFontFamily = (font: string) => {
-    execWithCommand("fontName", font);
+    if (activeField === "title") {
+      updateSlideTitleStyle({ fontFamily: font });
+      if (titleRef.current) {
+        titleRef.current.style.fontFamily = font;
+      }
+    } else {
+      execWithCommand("fontName", font);
+    }
   };
 
   const applyFontSize = (size: number) => {
-    const commandValue = FONT_SIZE_TO_COMMAND[size];
-    if (!commandValue) return;
-    execWithCommand("fontSize", commandValue);
+    if (activeField === "title") {
+      updateSlideTitleStyle({ fontSize: size });
+      if (titleRef.current) {
+        titleRef.current.style.fontSize = `${size}px`;
+      }
+    } else {
+      const commandValue = FONT_SIZE_TO_COMMAND[size];
+      if (!commandValue) return;
+      execWithCommand("fontSize", commandValue);
+    }
   };
 
-  const toggleBold = () => execWithCommand("bold");
-  const toggleItalic = () => execWithCommand("italic");
+  const toggleBold = () => {
+    if (activeField === "title") {
+      const currentStyle = ensureTitleStyle(selectedSlide?.titleStyle);
+      updateSlideTitleStyle({ bold: !currentStyle.bold });
+      if (titleRef.current) {
+        titleRef.current.style.fontWeight = currentStyle.bold ? "normal" : "bold";
+      }
+    } else {
+      execWithCommand("bold");
+    }
+  };
+
+  const toggleItalic = () => {
+    if (activeField === "title") {
+      const currentStyle = ensureTitleStyle(selectedSlide?.titleStyle);
+      updateSlideTitleStyle({ italic: !currentStyle.italic });
+      if (titleRef.current) {
+        titleRef.current.style.fontStyle = currentStyle.italic ? "normal" : "italic";
+      }
+    } else {
+      execWithCommand("italic");
+    }
+  };
+
   const toggleUnderline = () => execWithCommand("underline");
 
   const applyTextColor = (color: string) => {
     setIsColorPickerOpen(false);
-    execWithCommand("foreColor", color);
+    if (activeField === "title") {
+      updateSlideTitleStyle({ color });
+      if (titleRef.current) {
+        titleRef.current.style.color = color;
+      }
+    } else {
+      execWithCommand("foreColor", color);
+    }
   };
 
   const applyHighlightColor = (color: string) => {
@@ -619,8 +879,8 @@ export default function EditorPage({ params }: { params: { id: string } }) {
       ref.style.lineHeight = value.toString();
     }
 
-    setSlides((prev) =>
-      prev.map((slide) => {
+    setSlides((prev) => {
+      const newSlides = prev.map((slide) => {
         if (slide.id !== selectedSlideId) return slide;
         const formatting = ensureFormatting(slide.formatting);
         return {
@@ -630,21 +890,143 @@ export default function EditorPage({ params }: { params: { id: string } }) {
             [activeField]: { lineHeight: value },
           },
         };
-      })
-    );
+      });
+      saveToHistory(newSlides);
+      return newSlides;
+    });
 
     if (activeField !== "notes") {
       syncActiveFieldContent(activeField);
     }
   };
 
-  const applyUndo = () => execWithCommand("undo");
-  const applyRedo = () => execWithCommand("redo");
+  const applyLetterSpacing = (value: number) => {
+    if (activeField === "title") {
+      updateSlideTitleStyle({ letterSpacing: value });
+      if (titleRef.current) {
+        titleRef.current.style.letterSpacing = `${value}px`;
+      }
+    }
+  };
+
+  // Drag functionality for title
+  const dragStartRef = useRef<{ x: number; y: number; startX: number; startY: number } | null>(null);
+
+  const handleTitleMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (isReadOnly || !titleRef.current) return;
+    // Only start dragging if clicking on the title element itself, not on text selection
+    if (window.getSelection()?.toString()) {
+      return; // Allow text selection
+    }
+    event.preventDefault();
+    setActiveField("title");
+    const rect = titleRef.current.getBoundingClientRect();
+    const canvasSurface = titleRef.current.closest(`.${styles.canvasSurface}`);
+    if (!canvasSurface) return;
+    const canvasRect = canvasSurface.getBoundingClientRect();
+    const currentPosition = ensureTitlePosition(selectedSlide?.titlePosition);
+    dragStartRef.current = {
+      x: currentPosition.x,
+      y: currentPosition.y,
+      startX: event.clientX - canvasRect.left - currentPosition.x,
+      startY: event.clientY - canvasRect.top - currentPosition.y,
+    };
+  };
+
+  useEffect(() => {
+    if (!dragStartRef.current) return;
+
+    const handleMouseMove = (event: MouseEvent) => {
+      if (!dragStartRef.current || !titleRef.current) return;
+      const canvasSurface = titleRef.current.closest(`.${styles.canvasSurface}`);
+      if (!canvasSurface) return;
+      const canvasRect = canvasSurface.getBoundingClientRect();
+      const newX = event.clientX - canvasRect.left - dragStartRef.current.startX;
+      const newY = event.clientY - canvasRect.top - dragStartRef.current.startY;
+      
+      updateSlideTitlePosition({ x: newX, y: newY });
+      if (titleRef.current) {
+        titleRef.current.style.transform = `translate(${newX}px, ${newY}px)`;
+      }
+    };
+
+    const handleMouseUp = () => {
+      dragStartRef.current = null;
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [selectedSlideId, updateSlideTitlePosition]);
+
+  // Animation controls
+  const startAnimation = useCallback(() => {
+    if (!titleRef.current || !selectedSlide) return;
+    const animation = ensureTitleAnimation(selectedSlide.titleAnimation);
+    if (animation.type === "none") return;
+
+    setIsAnimating(true);
+    setAnimationPaused(false);
+    const element = titleRef.current;
+
+    // Remove existing animation classes
+    element.classList.remove("animate-fade-in", "animate-slide-in", "animate-marquee");
+
+    if (animation.type === "fade-in") {
+      element.classList.add("animate-fade-in");
+      element.style.animationDuration = `${animation.duration}s`;
+      element.style.animationIterationCount = animation.loop ? "infinite" : "1";
+    } else if (animation.type === "slide-in") {
+      element.classList.add("animate-slide-in");
+      element.style.animationDuration = `${animation.duration}s`;
+      element.style.animationIterationCount = animation.loop ? "infinite" : "1";
+    } else if (animation.type === "marquee") {
+      element.classList.add("animate-marquee");
+      element.style.animationDuration = `${animation.duration}s`;
+      element.style.animationIterationCount = animation.loop ? "infinite" : "1";
+    }
+  }, [selectedSlide]);
+
+  const pauseAnimation = useCallback(() => {
+    if (!titleRef.current) return;
+    titleRef.current.style.animationPlayState = animationPaused ? "running" : "paused";
+    setAnimationPaused((prev) => !prev);
+  }, [animationPaused]);
+
+  const stopAnimation = useCallback(() => {
+    if (!titleRef.current) return;
+    setIsAnimating(false);
+    setAnimationPaused(false);
+    titleRef.current.classList.remove("animate-fade-in", "animate-slide-in", "animate-marquee");
+    titleRef.current.style.animation = "none";
+  }, []);
+
+  const applyUndo = useCallback(() => {
+    if (historyIndex > 0) {
+      const newIndex = historyIndex - 1;
+      setHistoryIndex(newIndex);
+      setSlides(JSON.parse(JSON.stringify(history[newIndex]))); // Deep clone
+    }
+  }, [history, historyIndex]);
+
+  const applyRedo = useCallback(() => {
+    if (historyIndex < history.length - 1) {
+      const newIndex = historyIndex + 1;
+      setHistoryIndex(newIndex);
+      setSlides(JSON.parse(JSON.stringify(history[newIndex]))); // Deep clone
+    }
+  }, [history, historyIndex]);
 
   const updateSlideField = (field: keyof SlideData, value: string) => {
-    setSlides((prev) =>
-      prev.map((slide) => (slide.id === selectedSlideId ? { ...slide, [field]: value } : slide))
-    );
+    setSlides((prev) => {
+      const newSlides = prev.map((slide) => (slide.id === selectedSlideId ? { ...slide, [field]: value } : slide));
+      saveToHistory(newSlides);
+      return newSlides;
+    });
   };
 
   const handleAddSlide = () => {
@@ -658,6 +1040,9 @@ export default function EditorPage({ params }: { params: { id: string } }) {
         notes: "",
         theme: themeName,
         formatting: createDefaultFormatting(),
+        titleStyle: { ...DEFAULT_TITLE_STYLE },
+        titlePosition: { ...DEFAULT_TITLE_POSITION },
+        titleAnimation: { ...DEFAULT_TITLE_ANIMATION },
       };
       setSelectedSlideId(newSlide.id);
       return [...prev, newSlide];
@@ -780,14 +1165,134 @@ export default function EditorPage({ params }: { params: { id: string } }) {
       ? {}
       : { backgroundColor: commandState.highlight };
 
+  // Image handler - opens file picker and inserts image into content
+  const handleImageClick = useCallback(() => {
+    if (isReadOnly) return;
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.onchange = (event) => {
+      const file = (event.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const imageUrl = e.target?.result as string;
+        // Insert image into the active editable field
+        if (isEditableField && restoreSelection()) {
+          const img = document.createElement("img");
+          img.src = imageUrl;
+          img.style.maxWidth = "100%";
+          img.style.height = "auto";
+          img.style.display = "block";
+          img.style.margin = "8px 0";
+          document.execCommand("insertHTML", false, img.outerHTML);
+          syncActiveFieldContent(activeField);
+          syncCommandState();
+        } else {
+          // If no active field, set as background
+          setSlides((prev) => {
+            const newSlides = prev.map((slide) =>
+              slide.id === selectedSlideId ? { ...slide, backgroundImage: imageUrl } : slide
+            );
+            saveToHistory(newSlides);
+            return newSlides;
+          });
+        }
+      };
+      reader.readAsDataURL(file);
+    };
+    input.click();
+  }, [selectedSlideId, isReadOnly, saveToHistory, isEditableField, activeField, restoreSelection, syncActiveFieldContent, syncCommandState]);
+
+  // Background handler - opens color/image picker
+  const handleBackgroundClick = useCallback(() => {
+    if (isReadOnly) return;
+    setIsBackgroundPickerOpen((prev) => !prev);
+  }, [isReadOnly]);
+
+  const handleBackgroundColorSelect = useCallback((color: string) => {
+    setSlides((prev) => {
+      const newSlides = prev.map((slide) =>
+        slide.id === selectedSlideId ? { ...slide, backgroundColor: color, backgroundImage: undefined } : slide
+      );
+      saveToHistory(newSlides);
+      return newSlides;
+    });
+    setIsBackgroundPickerOpen(false);
+  }, [selectedSlideId, saveToHistory]);
+
+  const handleBackgroundImageSelect = useCallback(() => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.onchange = (event) => {
+      const file = (event.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const imageUrl = e.target?.result as string;
+        setSlides((prev) => {
+          const newSlides = prev.map((slide) =>
+            slide.id === selectedSlideId ? { ...slide, backgroundImage: imageUrl, backgroundColor: undefined } : slide
+          );
+          saveToHistory(newSlides);
+          return newSlides;
+        });
+      };
+      reader.readAsDataURL(file);
+    };
+    input.click();
+    setIsBackgroundPickerOpen(false);
+  }, [selectedSlideId, saveToHistory]);
+
+  // Layout handler - cycles through layouts
+  const handleLayoutClick = useCallback(() => {
+    if (isReadOnly) return;
+    setIsLayoutPickerOpen((prev) => !prev);
+  }, [isReadOnly]);
+
+  const handleLayoutSelect = useCallback((layout: "title-only" | "title-subtitle" | "title-content" | "blank") => {
+    setSlides((prev) => {
+      const newSlides = prev.map((slide) =>
+        slide.id === selectedSlideId ? { ...slide, layout } : slide
+      );
+      saveToHistory(newSlides);
+      return newSlides;
+    });
+    setIsLayoutPickerOpen(false);
+  }, [selectedSlideId, saveToHistory]);
+
+  // Theme handler - toggles theme picker (already implemented)
+  const handleThemeClick = useCallback(() => {
+    if (isReadOnly) return;
+    toggleThemePicker();
+  }, [isReadOnly, toggleThemePicker]);
+
+  // Transition handler - opens transition picker
+  const handleTransitionClick = useCallback(() => {
+    if (isReadOnly) return;
+    setIsTransitionPickerOpen((prev) => !prev);
+  }, [isReadOnly]);
+
+  const handleTransitionSelect = useCallback((transition: "none" | "fade" | "slide" | "zoom") => {
+    setSlides((prev) => {
+      const newSlides = prev.map((slide) =>
+        slide.id === selectedSlideId ? { ...slide, transition } : slide
+      );
+      saveToHistory(newSlides);
+      return newSlides;
+    });
+    setIsTransitionPickerOpen(false);
+  }, [selectedSlideId, saveToHistory]);
+
   const toolbarActions: Record<string, () => void> = {
     Undo: applyUndo,
     Redo: applyRedo,
-    Image: () => undefined,
-    Background: () => undefined,
-    Layout: () => undefined,
-    Theme: () => undefined,
-    Transition: () => undefined,
+    Image: handleImageClick,
+    Background: handleBackgroundClick,
+    Layout: handleLayoutClick,
+    Theme: handleThemeClick,
+    Transition: handleTransitionClick,
   };
 
   const currentFormatting = selectedSlide ? ensureFormatting(selectedSlide.formatting) : DEFAULT_FORMATTING;
@@ -822,13 +1327,8 @@ export default function EditorPage({ params }: { params: { id: string } }) {
     router.push("/viewer");
   };
 
-  const toggleColorPicker = () => setIsColorPickerOpen((prev) => !prev);
-  const toggleHighlightPicker = () => setIsHighlightPickerOpen((prev) => !prev);
-  const toggleThemePicker = () => setIsThemePickerOpen((prev) => !prev);
   const currentLineHeight =
     currentFormatting[activeField]?.lineHeight ?? DEFAULT_FORMATTING[activeField]?.lineHeight ?? 1.2;
-
-  const isReadOnly = status === "final";
 
   return (
     <>
@@ -1022,6 +1522,8 @@ export default function EditorPage({ params }: { params: { id: string } }) {
                   onAlign={applyAlign}
                   onList={applyList}
                   onLineHeightChange={applyLineHeight}
+                  onLetterSpacingChange={activeField === "title" ? applyLetterSpacing : undefined}
+                  letterSpacingValue={activeField === "title" ? ensureTitleStyle(selectedSlide?.titleStyle).letterSpacing : 0}
                   onUndo={applyUndo}
                   onRedo={applyRedo}
                   onToolbarMouseDown={handleToolbarMouseDown}
@@ -1070,7 +1572,15 @@ export default function EditorPage({ params }: { params: { id: string } }) {
 
                 <section className={styles.canvasRegion}>
                   <div className={styles.canvasShell}>
-                    <div className={styles.canvasSurface}>
+                    <div 
+                      className={styles.canvasSurface}
+                      style={{
+                        backgroundImage: selectedSlide?.backgroundImage ? `url(${selectedSlide.backgroundImage})` : undefined,
+                        backgroundColor: selectedSlide?.backgroundColor || undefined,
+                        backgroundSize: selectedSlide?.backgroundImage ? "cover" : undefined,
+                        backgroundPosition: selectedSlide?.backgroundImage ? "center" : undefined,
+                      }}
+                    >
                     <div
                       ref={titleRef}
                       className={styles.slideTitleInput}
@@ -1081,6 +1591,7 @@ export default function EditorPage({ params }: { params: { id: string } }) {
                       onInput={() => handleContentInput("title")}
                       onFocus={() => handleContentFocus("title")}
                       onBlur={() => handleContentBlur("title")}
+                      onMouseDown={handleTitleMouseDown}
                       style={getTextStyle("title")}
                       data-readonly={isReadOnly}
                     />
@@ -1164,6 +1675,82 @@ export default function EditorPage({ params }: { params: { id: string } }) {
 
               <section className={styles.bottomSection}>
                 <div className={styles.bottomGrid}>
+                  {activeField === "title" && (
+                    <section className={`${styles.bottomCard} ${styles.animationPanel}`}>
+                      <header className={styles.bottomCardHeader}>
+                        <div>
+                          <h2 className="text-xl font-semibold text-cyan-700">Title Animation</h2>
+                          <p className="text-sm text-gray-600">Control animation for the slide title.</p>
+                        </div>
+                      </header>
+                      <div className={styles.animationControls}>
+                        <div className={styles.animationRow}>
+                          <label htmlFor="animation-type">Animation Type:</label>
+                          <select
+                            id="animation-type"
+                            value={ensureTitleAnimation(selectedSlide?.titleAnimation).type}
+                            onChange={(e) => updateSlideTitleAnimation({ type: e.target.value as TitleAnimation["type"] })}
+                            disabled={isReadOnly}
+                          >
+                            <option value="none">None</option>
+                            <option value="fade-in">Fade In</option>
+                            <option value="slide-in">Slide In</option>
+                            <option value="marquee">Marquee</option>
+                          </select>
+                        </div>
+                        <div className={styles.animationRow}>
+                          <label htmlFor="animation-duration">Duration (seconds):</label>
+                          <input
+                            id="animation-duration"
+                            type="number"
+                            min="0.1"
+                            max="10"
+                            step="0.1"
+                            value={ensureTitleAnimation(selectedSlide?.titleAnimation).duration}
+                            onChange={(e) => updateSlideTitleAnimation({ duration: parseFloat(e.target.value) || 1 })}
+                            disabled={isReadOnly}
+                          />
+                        </div>
+                        <div className={styles.animationRow}>
+                          <label>
+                            <input
+                              type="checkbox"
+                              checked={ensureTitleAnimation(selectedSlide?.titleAnimation).loop}
+                              onChange={(e) => updateSlideTitleAnimation({ loop: e.target.checked })}
+                              disabled={isReadOnly}
+                            />
+                            Loop animation
+                          </label>
+                        </div>
+                        <div className={styles.animationButtons}>
+                          <button
+                            type="button"
+                            onClick={startAnimation}
+                            disabled={isReadOnly || ensureTitleAnimation(selectedSlide?.titleAnimation).type === "none"}
+                            className={styles.animationButton}
+                          >
+                            Preview
+                          </button>
+                          <button
+                            type="button"
+                            onClick={pauseAnimation}
+                            disabled={!isAnimating || isReadOnly}
+                            className={styles.animationButton}
+                          >
+                            {animationPaused ? "Resume" : "Pause"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={stopAnimation}
+                            disabled={!isAnimating || isReadOnly}
+                            className={styles.animationButton}
+                          >
+                            Stop
+                          </button>
+                        </div>
+                      </div>
+                    </section>
+                  )}
                   <section className={`${styles.bottomCard} ${styles.commentsPanel}`}>
                     <header className={styles.bottomCardHeader}>
                       <div>
@@ -1208,6 +1795,162 @@ export default function EditorPage({ params }: { params: { id: string } }) {
           <footer className={styles.footer}>© 2025 Aramco Digital – Secure Presentation Tool</footer>
         </div>
       </main>
+
+      {/* Background Picker Dropdown */}
+      {isBackgroundPickerOpen && !toolbarDisabled && typeof window !== "undefined" ? createPortal(
+        <div
+          className={styles.backgroundDropdown}
+          style={{
+            position: "fixed",
+            top: "50%",
+            left: "50%",
+            transform: "translate(-50%, -50%)",
+            zIndex: 1000,
+            background: "white",
+            padding: "20px",
+            borderRadius: "12px",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
+            minWidth: "300px",
+          }}
+        >
+          <h3 style={{ margin: "0 0 16px 0", fontSize: "16px", fontWeight: 600 }}>Background</h3>
+          <div style={{ display: "grid", gap: "12px" }}>
+            <div>
+              <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: 500 }}>Color</label>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                {["#ffffff", "#f3f4f6", "#e5e7eb", "#d1d5db", "#9ca3af", "#6b7280", "#374151", "#1f2937", "#111827"].map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    onClick={() => handleBackgroundColorSelect(color)}
+                    style={{
+                      width: "40px",
+                      height: "40px",
+                      borderRadius: "8px",
+                      border: "2px solid #e5e7eb",
+                      background: color,
+                      cursor: "pointer",
+                    }}
+                    aria-label={`Select ${color}`}
+                  />
+                ))}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleBackgroundImageSelect}
+              style={{
+                padding: "12px",
+                borderRadius: "8px",
+                border: "1px solid #d1d5db",
+                background: "#f9fafb",
+                cursor: "pointer",
+                fontSize: "14px",
+                fontWeight: 500,
+              }}
+            >
+              Upload Image
+            </button>
+          </div>
+        </div>,
+        document.body
+      ) : null}
+
+      {/* Layout Picker Dropdown */}
+      {isLayoutPickerOpen && !toolbarDisabled && typeof window !== "undefined" ? createPortal(
+        <div
+          className={styles.layoutDropdown}
+          style={{
+            position: "fixed",
+            top: "50%",
+            left: "50%",
+            transform: "translate(-50%, -50%)",
+            zIndex: 1000,
+            background: "white",
+            padding: "20px",
+            borderRadius: "12px",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
+            minWidth: "250px",
+          }}
+        >
+          <h3 style={{ margin: "0 0 16px 0", fontSize: "16px", fontWeight: 600 }}>Layout</h3>
+          <div style={{ display: "grid", gap: "8px" }}>
+            {[
+              { value: "title-only" as const, label: "Title Only" },
+              { value: "title-subtitle" as const, label: "Title & Subtitle" },
+              { value: "title-content" as const, label: "Title & Content" },
+              { value: "blank" as const, label: "Blank" },
+            ].map((layout) => (
+              <button
+                key={layout.value}
+                type="button"
+                onClick={() => handleLayoutSelect(layout.value)}
+                style={{
+                  padding: "12px",
+                  borderRadius: "8px",
+                  border: selectedSlide?.layout === layout.value ? "2px solid #56c1b0" : "1px solid #d1d5db",
+                  background: selectedSlide?.layout === layout.value ? "#f0fdfa" : "white",
+                  cursor: "pointer",
+                  fontSize: "14px",
+                  fontWeight: selectedSlide?.layout === layout.value ? 600 : 400,
+                  textAlign: "left",
+                }}
+              >
+                {layout.label}
+              </button>
+            ))}
+          </div>
+        </div>,
+        document.body
+      ) : null}
+
+      {/* Transition Picker Dropdown */}
+      {isTransitionPickerOpen && !toolbarDisabled && typeof window !== "undefined" ? createPortal(
+        <div
+          className={styles.transitionDropdown}
+          style={{
+            position: "fixed",
+            top: "50%",
+            left: "50%",
+            transform: "translate(-50%, -50%)",
+            zIndex: 1000,
+            background: "white",
+            padding: "20px",
+            borderRadius: "12px",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
+            minWidth: "250px",
+          }}
+        >
+          <h3 style={{ margin: "0 0 16px 0", fontSize: "16px", fontWeight: 600 }}>Transition</h3>
+          <div style={{ display: "grid", gap: "8px" }}>
+            {[
+              { value: "none" as const, label: "None" },
+              { value: "fade" as const, label: "Fade" },
+              { value: "slide" as const, label: "Slide" },
+              { value: "zoom" as const, label: "Zoom" },
+            ].map((transition) => (
+              <button
+                key={transition.value}
+                type="button"
+                onClick={() => handleTransitionSelect(transition.value)}
+                style={{
+                  padding: "12px",
+                  borderRadius: "8px",
+                  border: selectedSlide?.transition === transition.value ? "2px solid #56c1b0" : "1px solid #d1d5db",
+                  background: selectedSlide?.transition === transition.value ? "#f0fdfa" : "white",
+                  cursor: "pointer",
+                  fontSize: "14px",
+                  fontWeight: selectedSlide?.transition === transition.value ? 600 : 400,
+                  textAlign: "left",
+                }}
+              >
+                {transition.label}
+              </button>
+            ))}
+          </div>
+        </div>,
+        document.body
+      ) : null}
 
       <TeamChatWidget />
     </>

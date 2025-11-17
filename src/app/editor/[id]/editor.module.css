@@ -2508,3 +2508,134 @@
   color: rgba(45, 212, 191, 0.8);
 }
 
+/* Title Animations */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slide-in {
+  from {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes marquee {
+  0% {
+    transform: translateX(100%);
+  }
+  100% {
+    transform: translateX(-100%);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 1s ease-in-out;
+}
+
+.animate-slide-in {
+  animation: slide-in 1s ease-out;
+}
+
+.animate-marquee {
+  animation: marquee 10s linear infinite;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* Animation Panel */
+.animationPanel {
+  display: grid;
+  gap: 16px;
+}
+
+.animationControls {
+  display: grid;
+  gap: 16px;
+}
+
+.animationRow {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 12px;
+  align-items: center;
+}
+
+.animationRow label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+}
+
+.animationRow input[type="number"],
+.animationRow select {
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 14px;
+  background: white;
+}
+
+.animationRow input[type="checkbox"] {
+  margin-right: 8px;
+}
+
+.animationButtons {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.animationButton {
+  padding: 8px 16px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: white;
+  color: #374151;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.animationButton:hover:not(:disabled) {
+  background: #f3f4f6;
+  border-color: #9ca3af;
+}
+
+.animationButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+:global(.dark) .animationRow label {
+  color: #e5e7eb;
+}
+
+:global(.dark) .animationRow input[type="number"],
+:global(.dark) .animationRow select {
+  background: #1e293b;
+  border-color: #475569;
+  color: #e5e7eb;
+}
+
+:global(.dark) .animationButton {
+  background: #1e293b;
+  border-color: #475569;
+  color: #e5e7eb;
+}
+
+:global(.dark) .animationButton:hover:not(:disabled) {
+  background: #334155;
+  border-color: #64748b;
+}
+

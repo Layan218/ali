@@ -3,6 +3,7 @@ export type DemoSlide = {
   presentationId: string;
   title: string;
   subtitle: string;
+  notes?: string;
 };
 
 export const demoSlides: DemoSlide[] = [
