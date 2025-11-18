@@ -44,11 +44,12 @@ const normalizeSlide = (slide: ViewerSlide | DemoSlide | undefined): ViewerSlide
   if (!slide) {
     return { id: "unknown-slide", title: "Untitled slide", subtitle: "" };
   }
+  const viewerSlide = slide as ViewerSlide;
   return {
     id: slide.id ?? "unknown-slide",
     title: slide.title ?? "Untitled slide",
     subtitle: slide.subtitle ?? "",
-    notes: slide.notes ?? "",
+    notes: viewerSlide.notes ?? "",
     presentationId: (slide as DemoSlide).presentationId ?? undefined,
   };
 };

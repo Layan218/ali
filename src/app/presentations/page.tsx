@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode, type MouseEvent } from "react";
 import { useRouter } from "next/navigation";
-import { signOut } from "firebase/auth";
-import { auth } from "@/lib/firebase";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { onAuthStateChanged, signOut } from "firebase/auth";
+import { auth, db } from "@/lib/firebase";
+import { logAuditEvent } from "@/lib/audit";
 import TeamChatWidget from "@/components/TeamChatWidget";
 import styles from "./presentations.module.css";
-import { createPresentation, type PresentationRecord } from "@/lib/mockPresentationsApi";
 import {
   readPresentationMeta,
   recordPresentationDraft,
@@ -192,9 +193,18 @@ export default function PresentationsHome() {
     };
   }, [refreshPresentationMeta]);
 
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      if (!firebaseUser) {
+        router.push("/login");
+      }
+    });
+    return () => unsubscribe();
+  }, [router]);
+
   const toggleTheme = () => setIsDark((value) => !value);
 
-  const goToPresentation = (presentationId: string, title?: string) => {
+  const goToPresentation = (presentationId: string) => {
     router.push(`/editor?presentationId=${encodeURIComponent(presentationId)}&slideId=slide-1`);
   };
 
@@ -213,57 +223,74 @@ export default function PresentationsHome() {
     router.push("/audit-log");
   };
 
-  const createDraftPresentation = async (): Promise<string | undefined> => {
-    const presentationId = `presentation-${Date.now()}`;
-    const now = new Date();
-    const newPresentation: PresentationRecord = {
-      presentationId,
-      title: "Untitled presentation",
-      owner: "Current User",
-      lastUpdated: now.toISOString(),
-      status: "Draft",
-      slides: [
-        {
-          id: "slide-1",
-          title: "Click to add title",
-          subtitle: "Click to add subtitle",
-        },
-      ],
-    };
-
-    try {
-      await createPresentation(newPresentation);
-      recordPresentationDraft(presentationId, newPresentation.title);
-      return presentationId;
-    } catch (err) {
-      console.error("Failed to create presentation", err);
-      return undefined;
-    }
-  };
-
-  const handleBlankClick = async () => {
-    const presentationId = await createDraftPresentation();
-    if (presentationId) {
-      router.push(`/editor?presentationId=${encodeURIComponent(presentationId)}&slideId=slide-1`);
-    }
-  };
-
   const handleTrainingClick = () => {
     router.push("/training-deck");
   };
 
   const handleExecutiveSummaryClick = async (event?: MouseEvent<HTMLElement>) => {
     event?.stopPropagation();
-    let targetPresentationId: string | undefined = savedPresentations[0]?.id;
+    let targetPresentationId = savedPresentations[0]?.id;
 
     if (!targetPresentationId) {
-      targetPresentationId = await createDraftPresentation();
+      // Create a draft presentation if none exists
+      // Use a timestamp-based ID generated in a callback to avoid render-time impure function
+      const timestamp = Date.now();
+      const draftId = `presentation-${timestamp}`;
+      recordPresentationDraft(draftId, "Untitled presentation");
+      targetPresentationId = draftId;
     }
 
     if (targetPresentationId) {
       router.push(`/slides/${encodeURIComponent(targetPresentationId)}/executive-summary`);
     }
   };
+
+  async function createPresentation(templateName: string) {
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      router.push("/login");
+      return;
+    }
+
+    try {
+      const presentationRef = await addDoc(collection(db, "presentations"), {
+        ownerId: currentUser.uid,
+        title: templateName,
+        template: templateName,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      const presentationId = presentationRef.id;
+
+      await addDoc(collection(db, "presentations", presentationId, "slides"), {
+        order: 1,
+        title: "Slide 1",
+        content: "",
+        notes: "",
+        theme: "default",
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+
+      recordPresentationDraft(presentationId, templateName);
+
+      await logAuditEvent({
+        presentationId,
+        userId: currentUser.uid,
+        userEmail: currentUser.email ?? null,
+        action: "CREATE_PRESENTATION",
+        details: {
+          title: templateName,
+          templateName,
+        },
+      });
+
+      router.push(`/editor?presentationId=${encodeURIComponent(presentationId)}&slideId=slide-1`);
+    } catch (error) {
+      console.error("Failed to create presentation", error);
+    }
+  }
+
 
   return (
     <>
@@ -301,23 +328,65 @@ export default function PresentationsHome() {
             </button>
           ) : null}
           {!loading && user ? (
-            <button
-              type="button"
-              className={styles.secondary}
-              onClick={async () => {
-                await signOut(auth);
-                router.push("/login");
-              }}
-            >
-              Sign out
-            </button>
+            <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+              <button
+                type="button"
+                onClick={() => router.push("/profile")}
+                style={{
+                  width: "40px",
+                  height: "40px",
+                  borderRadius: "50%",
+                  background: "#E5F4F1",
+                  border: "none",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer",
+                  fontSize: "16px",
+                  fontWeight: 500,
+                  color: "#2b6a64",
+                  transition: "transform 0.15s ease, box-shadow 0.15s ease",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = "scale(1.05)";
+                  e.currentTarget.style.boxShadow = "0 2px 8px rgba(0, 0, 0, 0.15)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = "scale(1)";
+                  e.currentTarget.style.boxShadow = "none";
+                }}
+                aria-label="Profile"
+              >
+                {(() => {
+                  if (!user) return "U";
+                  const userRecord = user as Record<string, unknown>;
+                  const displayName = typeof userRecord.displayName === "string" ? userRecord.displayName : null;
+                  const email = typeof userRecord.email === "string" ? userRecord.email : null;
+                  const initial = displayName
+                    ? displayName.charAt(0).toUpperCase()
+                    : email
+                    ? email.charAt(0).toUpperCase()
+                    : "U";
+                  return initial;
+                })()}
+              </button>
+              <button
+                type="button"
+                className={styles.secondary}
+                onClick={async () => {
+                  await signOut(auth);
+                  router.push("/login");
+                }}
+              >
+                Sign out
+              </button>
+            </div>
           ) : null}
         </div>
       </nav>
 
       <div className={styles.page}>
         <header className={styles.headerBar}>
-          <h1 className={styles.heading}>Secure Presentations</h1>
           <div className={styles.searchWrap}>
             <input
               className={styles.searchInput}
@@ -330,6 +399,20 @@ export default function PresentationsHome() {
         </header>
 
         <main className={styles.content}>
+          <div className="mb-6">
+            <h1 className="text-3xl font-semibold text-gray-900">
+              {(() => {
+                if (!user) return "Welcome, User";
+                const userRecord = user as Record<string, unknown>;
+                const displayName = typeof userRecord.displayName === "string" ? userRecord.displayName : null;
+                const userEmail = typeof userRecord.email === "string" ? userRecord.email : null;
+                return `Welcome, ${displayName || userEmail || "User"}`;
+              })()}
+            </h1>
+            <p className="mt-1 text-lg text-gray-700">
+              Secure Presentations
+            </p>
+          </div>
           <section className={styles.templatesSection}>
             <div className={styles.sectionHeader}>
               <h2>Home</h2>
@@ -341,7 +424,7 @@ export default function PresentationsHome() {
                   className={styles.templateCard}
                   onClick={(event) => {
                     if (template.id === "template-blank") {
-                      void handleBlankClick();
+                      void createPresentation("Blank presentation");
                     } else if (template.id === "template-team-update") {
                       goToAuditLog(event);
                     } else if (template.id === "template-project-review") {
@@ -379,7 +462,7 @@ export default function PresentationsHome() {
                 <article
                   key={item.id}
                   className={styles.recentCard}
-                  onClick={() => goToPresentation(item.id, item.title)}
+                  onClick={() => goToPresentation(item.id)}
                 >
                   <div className={styles.recentMeta}>
                     <h3>{highlightMatch(item.title || "Untitled presentation")}</h3>

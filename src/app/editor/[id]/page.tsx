@@ -2,11 +2,25 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, FormEvent } from "react";
-import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { signOut } from "firebase/auth";
-import { auth } from "@/lib/firebase";
+import { onAuthStateChanged, signOut } from "firebase/auth";
+import { auth, db } from "@/lib/firebase";
+import {
+  doc,
+  getDoc,
+  setDoc,
+  deleteDoc,
+  addDoc,
+  collection,
+  getDocs,
+  query,
+  orderBy,
+  serverTimestamp,
+  onSnapshot,
+} from "firebase/firestore";
+import { encryptText, decryptText } from "@/lib/encryption";
+import { logAuditEvent } from "@/lib/audit";
 import { useAuth } from "@/context/AuthContext";
 import TeamChatWidget from "@/components/TeamChatWidget";
 import styles from "./editor.module.css";
@@ -27,41 +41,31 @@ type AlignOption = "left" | "center" | "right";
 
 type SlideFormatting = Record<FieldKey, { lineHeight: number }>;
 
-type TitleStyle = {
-  fontFamily: string;
-  fontSize: number;
-  color: string;
-  bold: boolean;
-  italic: boolean;
-  letterSpacing: number;
-};
-
-type TitlePosition = {
-  x: number;
-  y: number;
-  zIndex: number;
-};
-
-type TitleAnimation = {
-  type: "none" | "fade-in" | "slide-in" | "marquee";
-  duration: number; // in seconds
-  loop: boolean;
-};
-
 type SlideData = {
   id: string;
+  order?: number;
   title: string;
   subtitle: string;
   notes: string;
   theme: string;
   formatting: SlideFormatting;
-  titleStyle?: TitleStyle;
-  titlePosition?: TitlePosition;
-  titleAnimation?: TitleAnimation;
-  backgroundImage?: string;
-  backgroundColor?: string;
-  layout?: "title-only" | "title-subtitle" | "title-content" | "blank";
-  transition?: "none" | "fade" | "slide" | "zoom";
+};
+
+type VersionSnapshotSlide = {
+  slideId: string;
+  order: number;
+  title: string;
+  encryptedContent: string;
+  encryptedNotes: string;
+  theme: string;
+};
+
+type PresentationVersion = {
+  id: string;
+  createdAt: Date | null;
+  createdBy: string | null;
+  summary: string;
+  slidesSnapshot: VersionSnapshotSlide[];
 };
 
 type ThemeOption = {
@@ -142,27 +146,6 @@ const DEFAULT_FORMATTING: SlideFormatting = {
   notes: { lineHeight: 1.4 },
 };
 
-const DEFAULT_TITLE_STYLE: TitleStyle = {
-  fontFamily: "Calibri",
-  fontSize: 48,
-  color: "#202124",
-  bold: false,
-  italic: false,
-  letterSpacing: 0,
-};
-
-const DEFAULT_TITLE_POSITION: TitlePosition = {
-  x: 0,
-  y: 0,
-  zIndex: 1,
-};
-
-const DEFAULT_TITLE_ANIMATION: TitleAnimation = {
-  type: "none",
-  duration: 1,
-  loop: false,
-};
-
 const createDefaultFormatting = (): SlideFormatting => ({
   title: { lineHeight: DEFAULT_FORMATTING.title.lineHeight },
   subtitle: { lineHeight: DEFAULT_FORMATTING.subtitle.lineHeight },
@@ -173,27 +156,6 @@ const ensureFormatting = (formatting?: SlideFormatting): SlideFormatting => ({
   title: { lineHeight: formatting?.title?.lineHeight ?? DEFAULT_FORMATTING.title.lineHeight },
   subtitle: { lineHeight: formatting?.subtitle?.lineHeight ?? DEFAULT_FORMATTING.subtitle.lineHeight },
   notes: { lineHeight: formatting?.notes?.lineHeight ?? DEFAULT_FORMATTING.notes.lineHeight },
-});
-
-const ensureTitleStyle = (style?: TitleStyle): TitleStyle => ({
-  fontFamily: style?.fontFamily ?? DEFAULT_TITLE_STYLE.fontFamily,
-  fontSize: style?.fontSize ?? DEFAULT_TITLE_STYLE.fontSize,
-  color: style?.color ?? DEFAULT_TITLE_STYLE.color,
-  bold: style?.bold ?? DEFAULT_TITLE_STYLE.bold,
-  italic: style?.italic ?? DEFAULT_TITLE_STYLE.italic,
-  letterSpacing: style?.letterSpacing ?? DEFAULT_TITLE_STYLE.letterSpacing,
-});
-
-const ensureTitlePosition = (position?: TitlePosition): TitlePosition => ({
-  x: position?.x ?? DEFAULT_TITLE_POSITION.x,
-  y: position?.y ?? DEFAULT_TITLE_POSITION.y,
-  zIndex: position?.zIndex ?? DEFAULT_TITLE_POSITION.zIndex,
-});
-
-const ensureTitleAnimation = (animation?: TitleAnimation): TitleAnimation => ({
-  type: animation?.type ?? DEFAULT_TITLE_ANIMATION.type,
-  duration: animation?.duration ?? DEFAULT_TITLE_ANIMATION.duration,
-  loop: animation?.loop ?? DEFAULT_TITLE_ANIMATION.loop,
 });
 
 const fieldKeyMap: Record<FieldKey, keyof SlideData> = {
@@ -243,36 +205,30 @@ function formatTitleFromId(id: string) {
 const initialSlides: SlideData[] = [
   {
     id: "slide-1",
+    order: 1,
     title: placeholderMap.title,
     subtitle: placeholderMap.subtitle,
     notes: "",
     theme: INITIAL_THEME,
     formatting: createDefaultFormatting(),
-    titleStyle: { ...DEFAULT_TITLE_STYLE },
-    titlePosition: { ...DEFAULT_TITLE_POSITION },
-    titleAnimation: { ...DEFAULT_TITLE_ANIMATION },
   },
   {
     id: "slide-2",
+    order: 2,
     title: placeholderMap.title,
     subtitle: placeholderMap.subtitle,
     notes: "",
     theme: INITIAL_THEME,
     formatting: createDefaultFormatting(),
-    titleStyle: { ...DEFAULT_TITLE_STYLE },
-    titlePosition: { ...DEFAULT_TITLE_POSITION },
-    titleAnimation: { ...DEFAULT_TITLE_ANIMATION },
   },
   {
     id: "slide-3",
+    order: 3,
     title: placeholderMap.title,
     subtitle: placeholderMap.subtitle,
     notes: "",
     theme: INITIAL_THEME,
     formatting: createDefaultFormatting(),
-    titleStyle: { ...DEFAULT_TITLE_STYLE },
-    titlePosition: { ...DEFAULT_TITLE_POSITION },
-    titleAnimation: { ...DEFAULT_TITLE_ANIMATION },
   },
 ];
 
@@ -293,22 +249,29 @@ export default function EditorPage({ params }: { params: { id: string } }) {
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
   const [isHighlightPickerOpen, setIsHighlightPickerOpen] = useState(false);
   const [isThemePickerOpen, setIsThemePickerOpen] = useState(false);
-  const [isImagePickerOpen, setIsImagePickerOpen] = useState(false);
-  const [isBackgroundPickerOpen, setIsBackgroundPickerOpen] = useState(false);
-  const [isLayoutPickerOpen, setIsLayoutPickerOpen] = useState(false);
-  const [isTransitionPickerOpen, setIsTransitionPickerOpen] = useState(false);
   const [comments, setComments] = useState<CommentItem[]>(initialComments);
   const [newComment, setNewComment] = useState("");
+  const [isLoadingFromFirestore, setIsLoadingFromFirestore] = useState(false);
+  const [hasLoadedFromFirestore, setHasLoadedFromFirestore] = useState(false);
+  const [versions, setVersions] = useState<PresentationVersion[]>([]);
+  const [isSavingVersion, setIsSavingVersion] = useState(false);
+  const [isRestoringVersion, setIsRestoringVersion] = useState(false);
+  const [presentationOwnerId, setPresentationOwnerId] = useState<string | null>(null);
+  const [presentationCollaboratorIds, setPresentationCollaboratorIds] = useState<string[]>([]);
+  const [teamRoles, setTeamRoles] = useState<Record<string, "owner" | "editor" | "viewer">>({});
+  const [ownerDisplayName, setOwnerDisplayName] = useState<string | null>(null);
+  const [collaboratorDisplayNames, setCollaboratorDisplayNames] = useState<Record<string, string>>({});
+  const [firebaseUserId, setFirebaseUserId] = useState<string | null>(auth.currentUser?.uid ?? null);
+  const [firebaseUserEmail, setFirebaseUserEmail] = useState<string | null>(auth.currentUser?.email ?? null);
+  const [isTeamModalOpen, setIsTeamModalOpen] = useState(false);
+  const [newCollaboratorValue, setNewCollaboratorValue] = useState("");
+  const [teamModalError, setTeamModalError] = useState<string | null>(null);
+  const [isUpdatingTeam, setIsUpdatingTeam] = useState(false);
   const storageKey = useMemo(() => `presentation-${params.id}-slides`, [params.id]);
-  
-  // Undo/Redo history
-  const [history, setHistory] = useState<SlideData[][]>([initialSlides]);
-  const [historyIndex, setHistoryIndex] = useState(0);
-  
-  // Animation state
-  const [isAnimating, setIsAnimating] = useState(false);
-  const [animationPaused, setAnimationPaused] = useState(false);
-  const animationRef = useRef<number | null>(null);
+  const storedUserRecord = useMemo(
+    () => (user && typeof user === "object" ? (user as Record<string, unknown>) : null),
+    [user]
+  );
 
   const colorButtonRef = useRef<HTMLDivElement | null>(null);
   const highlightButtonRef = useRef<HTMLDivElement | null>(null);
@@ -318,64 +281,6 @@ export default function EditorPage({ params }: { params: { id: string } }) {
   const notesRef = useRef<HTMLTextAreaElement | null>(null);
   const selectionRef = useRef<Range | null>(null);
   const hasHydratedRef = useRef(false);
-
-  const isReadOnly = status === "final";
-
-  // History management - defined early so it can be used in other callbacks
-  const saveToHistory = useCallback((newSlides: SlideData[]) => {
-    setHistory((prev) => {
-      const newHistory = prev.slice(0, historyIndex + 1);
-      newHistory.push(JSON.parse(JSON.stringify(newSlides))); // Deep clone
-      return newHistory.slice(-50); // Keep last 50 states
-    });
-    setHistoryIndex((prev) => Math.min(prev + 1, 49));
-  }, [historyIndex]);
-
-  // Update callbacks - defined early so they can be used in useEffects
-  const updateSlideTitleStyle = useCallback((updates: Partial<TitleStyle>) => {
-    setSlides((prev) => {
-      const newSlides = prev.map((slide) => {
-        if (slide.id !== selectedSlideId) return slide;
-        const currentStyle = ensureTitleStyle(slide.titleStyle);
-        return {
-          ...slide,
-          titleStyle: { ...currentStyle, ...updates },
-        };
-      });
-      saveToHistory(newSlides);
-      return newSlides;
-    });
-  }, [selectedSlideId, saveToHistory]);
-
-  const updateSlideTitlePosition = useCallback((updates: Partial<TitlePosition>) => {
-    setSlides((prev) => {
-      const newSlides = prev.map((slide) => {
-        if (slide.id !== selectedSlideId) return slide;
-        const currentPosition = ensureTitlePosition(slide.titlePosition);
-        return {
-          ...slide,
-          titlePosition: { ...currentPosition, ...updates },
-        };
-      });
-      saveToHistory(newSlides);
-      return newSlides;
-    });
-  }, [selectedSlideId, saveToHistory]);
-
-  const updateSlideTitleAnimation = useCallback((updates: Partial<TitleAnimation>) => {
-    setSlides((prev) => {
-      const newSlides = prev.map((slide) => {
-        if (slide.id !== selectedSlideId) return slide;
-        const currentAnimation = ensureTitleAnimation(slide.titleAnimation);
-        return {
-          ...slide,
-          titleAnimation: { ...currentAnimation, ...updates },
-        };
-      });
-      saveToHistory(newSlides);
-      return newSlides;
-    });
-  }, [selectedSlideId, saveToHistory]);
 
   const [commandState, setCommandState] = useState<CommandState>({
     fontFamily: "Calibri",
@@ -399,6 +304,189 @@ export default function EditorPage({ params }: { params: { id: string } }) {
   const isLastSlide = currentSlideIndex === slides.length - 1;
   const canDeleteSlide = slides.length > 1;
 
+  // Load presentation and slides from Firestore
+  const loadFromFirestore = useCallback(
+    async (options?: { force?: boolean; selectSlideId?: string }) => {
+      if (!presentationId) return;
+
+      const force = options?.force ?? false;
+      const explicitSlideId = options?.selectSlideId;
+
+      if (!force && hasLoadedFromFirestore) return;
+
+      setIsLoadingFromFirestore(true);
+      try {
+      // Load presentation document
+      const presentationRef = doc(db, "presentations", presentationId);
+      const presentationSnap = await getDoc(presentationRef);
+      
+      if (!presentationSnap.exists()) {
+        console.warn("Presentation not found in Firestore");
+        setIsLoadingFromFirestore(false);
+        setPresentationOwnerId(null);
+        setPresentationCollaboratorIds([]);
+        return;
+      }
+
+      const presentationData = presentationSnap.data();
+      if (presentationData?.title) {
+        setPresentationTitle(presentationData.title);
+      }
+      if (presentationData?.status === "final" || presentationData?.status === "draft") {
+        setStatus(presentationData.status);
+      }
+      const ownerId =
+        presentationData && typeof presentationData.ownerId === "string" ? presentationData.ownerId : null;
+      const collaboratorsRaw = Array.isArray(presentationData?.collaboratorIds)
+        ? presentationData.collaboratorIds
+        : [];
+      const collaborators = collaboratorsRaw.filter((value): value is string => typeof value === "string");
+      setPresentationOwnerId(ownerId);
+      setPresentationCollaboratorIds(collaborators);
+
+      // Load teamRoles
+      const rolesRaw = presentationData?.teamRoles;
+      if (rolesRaw && typeof rolesRaw === "object" && !Array.isArray(rolesRaw)) {
+        const roles: Record<string, "owner" | "editor" | "viewer"> = {};
+        for (const [key, value] of Object.entries(rolesRaw)) {
+          if (value === "owner" || value === "editor" || value === "viewer") {
+            roles[key] = value;
+          }
+        }
+        setTeamRoles(roles);
+      } else {
+        setTeamRoles({});
+      }
+
+      // Fetch display names for owner and collaborators
+      const fetchDisplayNames = async () => {
+        const names: Record<string, string> = {};
+        if (ownerId) {
+          try {
+            const ownerRef = doc(db, "users", ownerId);
+            const ownerSnap = await getDoc(ownerRef);
+            const ownerData = ownerSnap.data();
+            if (ownerData?.displayName) {
+              setOwnerDisplayName(ownerData.displayName);
+            } else if (ownerData?.email) {
+              setOwnerDisplayName(ownerData.email);
+            } else {
+              setOwnerDisplayName(ownerId);
+            }
+          } catch (err) {
+            console.warn("Failed to fetch owner displayName:", err);
+            setOwnerDisplayName(ownerId);
+          }
+        }
+        for (const collabId of collaborators) {
+          try {
+            const collabRef = doc(db, "users", collabId);
+            const collabSnap = await getDoc(collabRef);
+            const collabData = collabSnap.data();
+            if (collabData?.displayName) {
+              names[collabId] = collabData.displayName;
+            } else if (collabData?.email) {
+              names[collabId] = collabData.email;
+            } else {
+              names[collabId] = collabId;
+            }
+          } catch (err) {
+            console.warn(`Failed to fetch displayName for ${collabId}:`, err);
+            names[collabId] = collabId;
+          }
+        }
+        setCollaboratorDisplayNames(names);
+      };
+      void fetchDisplayNames();
+
+      // Load slides subcollection
+      const slidesRef = collection(db, "presentations", presentationId, "slides");
+      const slidesQuery = query(slidesRef, orderBy("order", "asc"));
+      const slidesSnap = await getDocs(slidesQuery);
+
+      if (!slidesSnap.empty) {
+        const loadedSlides: SlideData[] = slidesSnap.docs
+          .map((docSnap, index) => {
+            const data = docSnap.data();
+            const rawContent =
+              typeof data.content === "string" && data.content.length > 0
+                ? data.content
+                : typeof data.subtitle === "string"
+                ? data.subtitle
+                : "";
+            const rawNotes = typeof data.notes === "string" ? data.notes : "";
+
+            const decryptedContent = rawContent ? decryptText(rawContent) : "";
+            const decryptedNotes = rawNotes ? decryptText(rawNotes) : "";
+
+            const finalContent =
+              decryptedContent ||
+              (typeof data.subtitle === "string" ? data.subtitle : "") ||
+              rawContent ||
+              "";
+            const finalNotes = decryptedNotes || rawNotes || "";
+
+            return {
+              id: docSnap.id,
+              order: typeof data.order === "number" ? data.order : index + 1,
+              title: data.title || placeholderMap.title,
+              subtitle: finalContent || placeholderMap.subtitle,
+              notes: finalNotes,
+              theme: data.theme || themes[0]?.name || DEFAULT_THEME,
+              formatting: ensureFormatting(data.formatting),
+            };
+          })
+          .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+        setSlides(loadedSlides);
+        
+        // Set selected slide based on slideId from URL or first slide
+        const urlSlideId = explicitSlideId ?? searchParams.get("slideId");
+        if (urlSlideId && loadedSlides.some((s) => s.id === urlSlideId)) {
+          setSelectedSlideId(urlSlideId);
+          if (explicitSlideId && urlSlideId !== searchParams.get("slideId")) {
+            router.replace(
+              `/editor?presentationId=${encodeURIComponent(presentationId)}&slideId=${encodeURIComponent(urlSlideId)}`
+            );
+          }
+        } else if (loadedSlides.length > 0) {
+          const fallbackId = loadedSlides[0].id;
+          setSelectedSlideId(fallbackId);
+          if (!explicitSlideId && urlSlideId && !loadedSlides.some((s) => s.id === urlSlideId)) {
+            router.replace(
+              `/editor?presentationId=${encodeURIComponent(presentationId)}&slideId=${encodeURIComponent(fallbackId)}`
+            );
+          }
+          if (explicitSlideId) {
+            router.replace(
+              `/editor?presentationId=${encodeURIComponent(presentationId)}&slideId=${encodeURIComponent(fallbackId)}`
+            );
+          }
+        }
+      } else {
+        // No slides found, create a default one
+        const defaultSlide: SlideData = {
+          id: `slide-${Date.now()}`,
+          title: placeholderMap.title,
+          subtitle: placeholderMap.subtitle,
+          notes: "",
+          theme: themes[0]?.name || DEFAULT_THEME,
+          formatting: createDefaultFormatting(),
+        };
+        setSlides([defaultSlide]);
+        setSelectedSlideId(defaultSlide.id);
+      }
+
+      setHasLoadedFromFirestore(true);
+    } catch (error) {
+      console.error("Failed to load from Firestore:", error);
+    } finally {
+      setIsLoadingFromFirestore(false);
+    }
+  },
+  [presentationId, hasLoadedFromFirestore, searchParams, router]
+);
+
   useEffect(() => {
     const saved = typeof window !== "undefined" ? localStorage.getItem("theme") : null;
     const prefersDark =
@@ -420,7 +508,50 @@ export default function EditorPage({ params }: { params: { id: string } }) {
     }
   }, [isDark]);
 
+  // Load from Firestore if presentationId is available
   useEffect(() => {
+    if (presentationId && !hasLoadedFromFirestore && !isLoadingFromFirestore) {
+      void loadFromFirestore();
+    }
+  }, [presentationId, hasLoadedFromFirestore, isLoadingFromFirestore, loadFromFirestore]);
+
+  // Update URL when selectedSlideId changes (for Firestore mode)
+  useEffect(() => {
+    if (presentationId && hasLoadedFromFirestore && selectedSlideId) {
+      const currentSlideId = searchParams.get("slideId");
+      if (currentSlideId !== selectedSlideId) {
+        router.replace(`/editor?presentationId=${encodeURIComponent(presentationId)}&slideId=${encodeURIComponent(selectedSlideId)}`);
+      }
+    }
+  }, [selectedSlideId, presentationId, hasLoadedFromFirestore, searchParams, router]);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      setFirebaseUserId(firebaseUser?.uid ?? null);
+      setFirebaseUserEmail(firebaseUser?.email ?? null);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!presentationId) {
+      setPresentationOwnerId(null);
+      setPresentationCollaboratorIds([]);
+    }
+  }, [presentationId]);
+
+  // Update selected slide when URL slideId changes (for browser back/forward)
+  useEffect(() => {
+    if (!presentationId || !hasLoadedFromFirestore) return;
+    const urlSlideId = searchParams.get("slideId");
+    if (urlSlideId && urlSlideId !== selectedSlideId && slides.some((s) => s.id === urlSlideId)) {
+      setSelectedSlideId(urlSlideId);
+    }
+  }, [searchParams, presentationId, hasLoadedFromFirestore, slides, selectedSlideId]);
+
+  // Fallback to localStorage if no presentationId (legacy mode)
+  useEffect(() => {
+    if (presentationId || hasLoadedFromFirestore) return; // Skip if using Firestore
     if (typeof window === "undefined") return;
     try {
       const stored = window.localStorage.getItem(storageKey);
@@ -429,19 +560,15 @@ export default function EditorPage({ params }: { params: { id: string } }) {
       if (!Array.isArray(parsed) || parsed.length === 0) return;
       const normalized = parsed.map((slide, index) => ({
         ...slide,
+        order: slide.order ?? index + 1,
         id: slide.id || `slide-${index + 1}`,
         title: slide.title ?? placeholderMap.title,
         subtitle: slide.subtitle ?? placeholderMap.subtitle,
         notes: slide.notes ?? "",
         theme: slide.theme ?? themes[0]?.name ?? DEFAULT_THEME,
         formatting: ensureFormatting(slide.formatting),
-        titleStyle: ensureTitleStyle(slide.titleStyle),
-        titlePosition: ensureTitlePosition(slide.titlePosition),
-        titleAnimation: ensureTitleAnimation(slide.titleAnimation),
       }));
       setSlides(normalized);
-      setHistory([normalized]); // Initialize history with loaded slides
-      setHistoryIndex(0);
       setSelectedSlideId((current) => {
         if (normalized.some((slide) => slide.id === current)) {
           return current;
@@ -453,13 +580,106 @@ export default function EditorPage({ params }: { params: { id: string } }) {
     } finally {
       hasHydratedRef.current = true;
     }
-  }, [storageKey]);
+  }, [storageKey, presentationId, hasLoadedFromFirestore]);
 
+  // Subscribe to Firestore comments
+  useEffect(() => {
+    if (!presentationId) return;
+
+    const commentsRef = collection(db, "presentations", presentationId, "comments");
+    const commentsQuery = query(commentsRef, orderBy("createdAt", "asc"));
+    const unsubscribe = onSnapshot(
+      commentsQuery,
+      (snapshot) => {
+        const items: CommentItem[] = snapshot.docs.map((docSnap) => {
+          const data = docSnap.data();
+          const rawText = typeof data.text === "string" ? data.text : "";
+          const decrypted = rawText ? decryptText(rawText) : "";
+          const finalText = decrypted || rawText || "";
+
+          let timestampLabel = "";
+          const createdAt = data.createdAt?.toDate ? data.createdAt.toDate() : null;
+          if (createdAt instanceof Date && !Number.isNaN(createdAt.getTime())) {
+            timestampLabel = createdAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+          }
+
+          return {
+            id: docSnap.id,
+            author: typeof data.userName === "string" && data.userName.length > 0 ? data.userName : "Team member",
+            message: finalText,
+            timestamp: timestampLabel,
+          };
+        });
+
+        // Mirror previous UX: newest first.
+        setComments(items.slice().reverse());
+      },
+      (error) => {
+        console.error("Failed to subscribe to comments:", error);
+      }
+    );
+
+    return () => {
+      unsubscribe();
+    };
+  }, [presentationId]);
+
+  // Subscribe to versions history
+  useEffect(() => {
+    if (!presentationId) {
+      setVersions([]);
+      return;
+    }
+
+    const versionsRef = collection(db, "presentations", presentationId, "versions");
+    const versionsQuery = query(versionsRef, orderBy("createdAt", "desc"));
+    const unsubscribe = onSnapshot(
+      versionsQuery,
+      (snapshot) => {
+        const records: PresentationVersion[] = snapshot.docs.map((docSnap) => {
+          const data = docSnap.data();
+          const createdAt =
+            data.createdAt && typeof data.createdAt.toDate === "function" ? data.createdAt.toDate() : null;
+          const summary = typeof data.summary === "string" ? data.summary : "";
+          const createdBy = typeof data.createdBy === "string" ? data.createdBy : null;
+          const rawSlides = Array.isArray(data.slidesSnapshot) ? data.slidesSnapshot : [];
+          const slidesSnapshot: VersionSnapshotSlide[] = rawSlides
+            .map((item) => ({
+              slideId: typeof item.slideId === "string" ? item.slideId : "",
+              order: typeof item.order === "number" ? item.order : 0,
+              title: typeof item.title === "string" ? item.title : "",
+              encryptedContent: typeof item.encryptedContent === "string" ? item.encryptedContent : "",
+              encryptedNotes: typeof item.encryptedNotes === "string" ? item.encryptedNotes : "",
+              theme: typeof item.theme === "string" ? item.theme : "default",
+            }))
+            .filter((item) => item.slideId.length > 0);
+
+          return {
+            id: docSnap.id,
+            createdAt,
+            createdBy,
+            summary,
+            slidesSnapshot,
+          };
+        });
+        setVersions(records);
+      },
+      (error) => {
+        console.error("Failed to subscribe to versions:", error);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [presentationId]);
+
+  // Expose version handlers for future UI hooks (without changing layout)
+  // Save to localStorage only if not using Firestore (legacy mode)
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!hasHydratedRef.current) return;
+    if (presentationId && hasLoadedFromFirestore) return; // Skip if using Firestore
     window.localStorage.setItem(storageKey, JSON.stringify(slides));
-  }, [slides, storageKey]);
+  }, [slides, storageKey, presentationId, hasLoadedFromFirestore]);
 
   useEffect(() => {
     if (!isColorPickerOpen) return;
@@ -495,51 +715,11 @@ export default function EditorPage({ params }: { params: { id: string } }) {
   }, [isThemePickerOpen]);
 
   useEffect(() => {
-    if (!isBackgroundPickerOpen) return;
-    const handleClickAway = (event: MouseEvent) => {
-      setIsBackgroundPickerOpen(false);
-    };
-    document.addEventListener("mousedown", handleClickAway);
-    return () => document.removeEventListener("mousedown", handleClickAway);
-  }, [isBackgroundPickerOpen]);
-
-  useEffect(() => {
-    if (!isLayoutPickerOpen) return;
-    const handleClickAway = (event: MouseEvent) => {
-      setIsLayoutPickerOpen(false);
-    };
-    document.addEventListener("mousedown", handleClickAway);
-    return () => document.removeEventListener("mousedown", handleClickAway);
-  }, [isLayoutPickerOpen]);
-
-  useEffect(() => {
-    if (!isTransitionPickerOpen) return;
-    const handleClickAway = (event: MouseEvent) => {
-      setIsTransitionPickerOpen(false);
-    };
-    document.addEventListener("mousedown", handleClickAway);
-    return () => document.removeEventListener("mousedown", handleClickAway);
-  }, [isTransitionPickerOpen]);
-
-  useEffect(() => {
     if (!selectedSlide) return;
     const formatting = selectedSlide.formatting ?? DEFAULT_FORMATTING;
-    const titleStyle = ensureTitleStyle(selectedSlide.titleStyle);
-    const titlePosition = ensureTitlePosition(selectedSlide.titlePosition);
-    
     if (titleRef.current) {
       titleRef.current.innerHTML = selectedSlide.title || placeholderMap.title;
       titleRef.current.style.lineHeight = `${formatting.title.lineHeight}`;
-      titleRef.current.style.fontFamily = titleStyle.fontFamily;
-      titleRef.current.style.fontSize = `${titleStyle.fontSize}px`;
-      titleRef.current.style.color = titleStyle.color;
-      titleRef.current.style.fontWeight = titleStyle.bold ? "bold" : "normal";
-      titleRef.current.style.fontStyle = titleStyle.italic ? "italic" : "normal";
-      titleRef.current.style.letterSpacing = `${titleStyle.letterSpacing}px`;
-      titleRef.current.style.transform = `translate(${titlePosition.x}px, ${titlePosition.y}px)`;
-      titleRef.current.style.zIndex = titlePosition.zIndex.toString();
-      titleRef.current.style.position = "relative";
-      titleRef.current.style.cursor = isReadOnly ? "default" : "move";
     }
     if (subtitleRef.current) {
       subtitleRef.current.innerHTML = selectedSlide.subtitle || placeholderMap.subtitle;
@@ -548,7 +728,7 @@ export default function EditorPage({ params }: { params: { id: string } }) {
     if (notesRef.current) {
       notesRef.current.style.lineHeight = `${formatting.notes.lineHeight}`;
     }
-  }, [selectedSlide, isReadOnly]);
+  }, [selectedSlide]);
 
   useEffect(() => {
     const handleSelectionChange = () => {
@@ -645,23 +825,6 @@ export default function EditorPage({ params }: { params: { id: string } }) {
   };
 
   const syncCommandState = () => {
-    if (activeField === "title" && selectedSlide) {
-      const titleStyle = ensureTitleStyle(selectedSlide.titleStyle);
-      setCommandState((prev) => ({
-        ...prev,
-        fontFamily: titleStyle.fontFamily,
-        fontSize: titleStyle.fontSize,
-        bold: titleStyle.bold,
-        italic: titleStyle.italic,
-        underline: false,
-        color: titleStyle.color,
-        highlight: "transparent",
-        align: "left",
-        listType: "none",
-      }));
-      return;
-    }
-
     if (!isEditableField) {
       setCommandState((prev) => ({
         ...prev,
@@ -758,10 +921,6 @@ export default function EditorPage({ params }: { params: { id: string } }) {
     el.style.height = `${Math.min(Math.max(el.scrollHeight, 80), 400)}px`;
   };
 
-  const toggleColorPicker = () => setIsColorPickerOpen((prev) => !prev);
-  const toggleHighlightPicker = () => setIsHighlightPickerOpen((prev) => !prev);
-  const toggleThemePicker = () => setIsThemePickerOpen((prev) => !prev);
-
   const handleThemeSelect = useCallback(
     (themeName: string) => {
       setSlides((prev) =>
@@ -785,65 +944,22 @@ export default function EditorPage({ params }: { params: { id: string } }) {
   }, [selectedSlideId, selectedSlide?.notes]);
 
   const applyFontFamily = (font: string) => {
-    if (activeField === "title") {
-      updateSlideTitleStyle({ fontFamily: font });
-      if (titleRef.current) {
-        titleRef.current.style.fontFamily = font;
-      }
-    } else {
-      execWithCommand("fontName", font);
-    }
+    execWithCommand("fontName", font);
   };
 
   const applyFontSize = (size: number) => {
-    if (activeField === "title") {
-      updateSlideTitleStyle({ fontSize: size });
-      if (titleRef.current) {
-        titleRef.current.style.fontSize = `${size}px`;
-      }
-    } else {
-      const commandValue = FONT_SIZE_TO_COMMAND[size];
-      if (!commandValue) return;
-      execWithCommand("fontSize", commandValue);
-    }
+    const commandValue = FONT_SIZE_TO_COMMAND[size];
+    if (!commandValue) return;
+    execWithCommand("fontSize", commandValue);
   };
 
-  const toggleBold = () => {
-    if (activeField === "title") {
-      const currentStyle = ensureTitleStyle(selectedSlide?.titleStyle);
-      updateSlideTitleStyle({ bold: !currentStyle.bold });
-      if (titleRef.current) {
-        titleRef.current.style.fontWeight = currentStyle.bold ? "normal" : "bold";
-      }
-    } else {
-      execWithCommand("bold");
-    }
-  };
-
-  const toggleItalic = () => {
-    if (activeField === "title") {
-      const currentStyle = ensureTitleStyle(selectedSlide?.titleStyle);
-      updateSlideTitleStyle({ italic: !currentStyle.italic });
-      if (titleRef.current) {
-        titleRef.current.style.fontStyle = currentStyle.italic ? "normal" : "italic";
-      }
-    } else {
-      execWithCommand("italic");
-    }
-  };
-
+  const toggleBold = () => execWithCommand("bold");
+  const toggleItalic = () => execWithCommand("italic");
   const toggleUnderline = () => execWithCommand("underline");
 
   const applyTextColor = (color: string) => {
     setIsColorPickerOpen(false);
-    if (activeField === "title") {
-      updateSlideTitleStyle({ color });
-      if (titleRef.current) {
-        titleRef.current.style.color = color;
-      }
-    } else {
-      execWithCommand("foreColor", color);
-    }
+    execWithCommand("foreColor", color);
   };
 
   const applyHighlightColor = (color: string) => {
@@ -879,8 +995,8 @@ export default function EditorPage({ params }: { params: { id: string } }) {
       ref.style.lineHeight = value.toString();
     }
 
-    setSlides((prev) => {
-      const newSlides = prev.map((slide) => {
+    setSlides((prev) =>
+      prev.map((slide) => {
         if (slide.id !== selectedSlideId) return slide;
         const formatting = ensureFormatting(slide.formatting);
         return {
@@ -890,163 +1006,100 @@ export default function EditorPage({ params }: { params: { id: string } }) {
             [activeField]: { lineHeight: value },
           },
         };
-      });
-      saveToHistory(newSlides);
-      return newSlides;
-    });
+      })
+    );
 
     if (activeField !== "notes") {
       syncActiveFieldContent(activeField);
     }
   };
 
-  const applyLetterSpacing = (value: number) => {
-    if (activeField === "title") {
-      updateSlideTitleStyle({ letterSpacing: value });
-      if (titleRef.current) {
-        titleRef.current.style.letterSpacing = `${value}px`;
-      }
-    }
-  };
-
-  // Drag functionality for title
-  const dragStartRef = useRef<{ x: number; y: number; startX: number; startY: number } | null>(null);
-
-  const handleTitleMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (isReadOnly || !titleRef.current) return;
-    // Only start dragging if clicking on the title element itself, not on text selection
-    if (window.getSelection()?.toString()) {
-      return; // Allow text selection
-    }
-    event.preventDefault();
-    setActiveField("title");
-    const rect = titleRef.current.getBoundingClientRect();
-    const canvasSurface = titleRef.current.closest(`.${styles.canvasSurface}`);
-    if (!canvasSurface) return;
-    const canvasRect = canvasSurface.getBoundingClientRect();
-    const currentPosition = ensureTitlePosition(selectedSlide?.titlePosition);
-    dragStartRef.current = {
-      x: currentPosition.x,
-      y: currentPosition.y,
-      startX: event.clientX - canvasRect.left - currentPosition.x,
-      startY: event.clientY - canvasRect.top - currentPosition.y,
-    };
-  };
-
-  useEffect(() => {
-    if (!dragStartRef.current) return;
-
-    const handleMouseMove = (event: MouseEvent) => {
-      if (!dragStartRef.current || !titleRef.current) return;
-      const canvasSurface = titleRef.current.closest(`.${styles.canvasSurface}`);
-      if (!canvasSurface) return;
-      const canvasRect = canvasSurface.getBoundingClientRect();
-      const newX = event.clientX - canvasRect.left - dragStartRef.current.startX;
-      const newY = event.clientY - canvasRect.top - dragStartRef.current.startY;
-      
-      updateSlideTitlePosition({ x: newX, y: newY });
-      if (titleRef.current) {
-        titleRef.current.style.transform = `translate(${newX}px, ${newY}px)`;
-      }
-    };
-
-    const handleMouseUp = () => {
-      dragStartRef.current = null;
-    };
-
-    document.addEventListener("mousemove", handleMouseMove);
-    document.addEventListener("mouseup", handleMouseUp);
-
-    return () => {
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", handleMouseUp);
-    };
-  }, [selectedSlideId, updateSlideTitlePosition]);
-
-  // Animation controls
-  const startAnimation = useCallback(() => {
-    if (!titleRef.current || !selectedSlide) return;
-    const animation = ensureTitleAnimation(selectedSlide.titleAnimation);
-    if (animation.type === "none") return;
-
-    setIsAnimating(true);
-    setAnimationPaused(false);
-    const element = titleRef.current;
-
-    // Remove existing animation classes
-    element.classList.remove("animate-fade-in", "animate-slide-in", "animate-marquee");
-
-    if (animation.type === "fade-in") {
-      element.classList.add("animate-fade-in");
-      element.style.animationDuration = `${animation.duration}s`;
-      element.style.animationIterationCount = animation.loop ? "infinite" : "1";
-    } else if (animation.type === "slide-in") {
-      element.classList.add("animate-slide-in");
-      element.style.animationDuration = `${animation.duration}s`;
-      element.style.animationIterationCount = animation.loop ? "infinite" : "1";
-    } else if (animation.type === "marquee") {
-      element.classList.add("animate-marquee");
-      element.style.animationDuration = `${animation.duration}s`;
-      element.style.animationIterationCount = animation.loop ? "infinite" : "1";
-    }
-  }, [selectedSlide]);
-
-  const pauseAnimation = useCallback(() => {
-    if (!titleRef.current) return;
-    titleRef.current.style.animationPlayState = animationPaused ? "running" : "paused";
-    setAnimationPaused((prev) => !prev);
-  }, [animationPaused]);
-
-  const stopAnimation = useCallback(() => {
-    if (!titleRef.current) return;
-    setIsAnimating(false);
-    setAnimationPaused(false);
-    titleRef.current.classList.remove("animate-fade-in", "animate-slide-in", "animate-marquee");
-    titleRef.current.style.animation = "none";
-  }, []);
-
-  const applyUndo = useCallback(() => {
-    if (historyIndex > 0) {
-      const newIndex = historyIndex - 1;
-      setHistoryIndex(newIndex);
-      setSlides(JSON.parse(JSON.stringify(history[newIndex]))); // Deep clone
-    }
-  }, [history, historyIndex]);
-
-  const applyRedo = useCallback(() => {
-    if (historyIndex < history.length - 1) {
-      const newIndex = historyIndex + 1;
-      setHistoryIndex(newIndex);
-      setSlides(JSON.parse(JSON.stringify(history[newIndex]))); // Deep clone
-    }
-  }, [history, historyIndex]);
+  const applyUndo = () => execWithCommand("undo");
+  const applyRedo = () => execWithCommand("redo");
 
   const updateSlideField = (field: keyof SlideData, value: string) => {
-    setSlides((prev) => {
-      const newSlides = prev.map((slide) => (slide.id === selectedSlideId ? { ...slide, [field]: value } : slide));
-      saveToHistory(newSlides);
-      return newSlides;
-    });
+    setSlides((prev) =>
+      prev.map((slide) => (slide.id === selectedSlideId ? { ...slide, [field]: value } : slide))
+    );
   };
 
-  const handleAddSlide = () => {
-    setSlides((prev) => {
-      const nextIndex = prev.length + 1;
-      const themeName = selectedThemeName || themes[0]?.name || DEFAULT_THEME;
-      const newSlide: SlideData = {
-        id: `slide-${nextIndex}-${Date.now()}`,
-        title: placeholderMap.title,
-        subtitle: placeholderMap.subtitle,
-        notes: "",
-        theme: themeName,
-        formatting: createDefaultFormatting(),
-        titleStyle: { ...DEFAULT_TITLE_STYLE },
-        titlePosition: { ...DEFAULT_TITLE_POSITION },
-        titleAnimation: { ...DEFAULT_TITLE_ANIMATION },
-      };
-      setSelectedSlideId(newSlide.id);
-      return [...prev, newSlide];
-    });
+  const handleAddSlide = async () => {
+    const themeName = selectedThemeName || themes[0]?.name || DEFAULT_THEME;
+
+    if (!presentationId) {
+      setSlides((prev) => {
+        const nextOrder =
+          prev.length > 0
+            ? prev.reduce((max, slide, index) => Math.max(max, slide.order ?? index + 1), 0) + 1
+            : 1;
+        const newSlideId = `slide-${Date.now()}`;
+        const defaultFormatting = createDefaultFormatting();
+        const newSlide: SlideData = {
+          id: newSlideId,
+          order: nextOrder,
+          title: placeholderMap.title,
+          subtitle: placeholderMap.subtitle,
+          notes: "",
+          theme: themeName,
+          formatting: defaultFormatting,
+        };
+        setSelectedSlideId(newSlideId);
+        return [...prev, newSlide];
+      });
+      return;
+    }
+
+    const nextOrder =
+      slides.length > 0
+        ? slides.reduce((max, slide, index) => Math.max(max, slide.order ?? index + 1), 0) + 1
+        : 1;
+    const newSlideId = `slide-${Date.now()}`;
+    const defaultFormatting = createDefaultFormatting();
+    const newSlide: SlideData = {
+      id: newSlideId,
+      order: nextOrder,
+      title: "New slide",
+      subtitle: placeholderMap.subtitle,
+      notes: "",
+      theme: themeName,
+      formatting: defaultFormatting,
+    };
+
+    try {
+      const slideRef = doc(db, "presentations", presentationId, "slides", newSlideId);
+      await setDoc(
+        slideRef,
+        {
+          order: nextOrder,
+          title: "New slide",
+          content: encryptText(""),
+          notes: encryptText(""),
+          theme: themeName,
+          formatting: defaultFormatting,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+
+      const currentUser = auth.currentUser;
+      await logAuditEvent({
+        presentationId,
+        userId: currentUser?.uid ?? null,
+        userEmail: currentUser?.email ?? null,
+        action: "ADD_SLIDE",
+        details: { slideId: newSlideId, order: nextOrder },
+      });
+
+      setSlides((prev) => [...prev, newSlide].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)));
+      setSelectedSlideId(newSlideId);
+      router.push(
+        `/editor?presentationId=${encodeURIComponent(presentationId)}&slideId=${encodeURIComponent(newSlideId)}`
+      );
+    } catch (error) {
+      console.error("Failed to add slide to Firestore:", error);
+    }
   };
 
   useEffect(() => {
@@ -1066,13 +1119,64 @@ export default function EditorPage({ params }: { params: { id: string } }) {
     return () => window.clearTimeout(timeoutId);
   }, [statusMessage]);
 
-  const handleSaveSlide = () => {
+  const handleSaveSlide = async () => {
     syncActiveFieldContent("title");
     syncActiveFieldContent("subtitle");
     if (notesRef.current) {
       updateSlideField("notes", notesRef.current.value);
     }
-    if (presentationId) {
+    
+    if (!presentationId) {
+      // Fallback to localStorage if no presentationId
+      const slideSummary = slides.map((slide) => ({
+        id: slide.id,
+        title: typeof slide.title === "string" ? slide.title : "",
+        subtitle: typeof slide.subtitle === "string" ? slide.subtitle : "",
+        notes: typeof slide.notes === "string" ? slide.notes : "",
+      }));
+      markPresentationSaved(presentationId || params.id, presentationTitle, slideSummary, status);
+      return;
+    }
+
+    try {
+      // Save presentation document
+      const presentationRef = doc(db, "presentations", presentationId);
+      await setDoc(
+        presentationRef,
+        {
+          title: presentationTitle,
+          status: status,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      // Save all slides
+      for (const slide of slides) {
+        const slideIndex = slides.findIndex((s) => s.id === slide.id);
+        const slideRef = doc(db, "presentations", presentationId, "slides", slide.id);
+        const plainContent =
+          typeof slide.subtitle === "string" ? slide.subtitle : placeholderMap.subtitle;
+        const plainNotes = typeof slide.notes === "string" ? slide.notes : "";
+        const encryptedContent = encryptText(plainContent);
+        const encryptedNotes = encryptText(plainNotes);
+
+        await setDoc(
+          slideRef,
+          {
+            order: slideIndex + 1,
+            title: typeof slide.title === "string" ? slide.title : "",
+            content: encryptedContent,
+            notes: encryptedNotes,
+            theme: slide.theme || "default",
+            formatting: slide.formatting || createDefaultFormatting(),
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+      }
+
+      // Also update localStorage meta for backward compatibility
       const slideSummary = slides.map((slide) => ({
         id: slide.id,
         title: typeof slide.title === "string" ? slide.title : "",
@@ -1080,11 +1184,42 @@ export default function EditorPage({ params }: { params: { id: string } }) {
         notes: typeof slide.notes === "string" ? slide.notes : "",
       }));
       markPresentationSaved(presentationId, presentationTitle, slideSummary, status);
+
+      const currentUser = auth.currentUser;
+      await logAuditEvent({
+        presentationId,
+        userId: currentUser?.uid ?? null,
+        userEmail: currentUser?.email ?? null,
+        action: "UPDATE_SLIDE_SET",
+        details: {
+          slideIds: slideSummary.map((slide) => slide.id),
+          count: slideSummary.length,
+        },
+      });
+    } catch (error) {
+      console.error("Failed to save to Firestore:", error);
     }
   };
 
-  const applyStatusUpdate = (nextStatus: "draft" | "final", message: string) => {
+  const applyStatusUpdate = async (nextStatus: "draft" | "final", message: string) => {
     if (!presentationId) return;
+    
+    // Update Firestore
+    try {
+      const presentationRef = doc(db, "presentations", presentationId);
+      await setDoc(
+        presentationRef,
+        {
+          status: nextStatus,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+    } catch (error) {
+      console.error("Failed to update status in Firestore:", error);
+    }
+    
+    // Update localStorage meta for backward compatibility
     updatePresentationStatus(presentationId, nextStatus);
     setStatus(nextStatus);
     setStatusMessage(message);
@@ -1099,23 +1234,71 @@ export default function EditorPage({ params }: { params: { id: string } }) {
     applyStatusUpdate("final", "Status: Finalized");
   };
 
-  const handleDeleteSlide = () => {
+  const handleDeleteSlide = async () => {
     if (!canDeleteSlide) {
+      console.warn("At least one slide must remain in the presentation.");
       return;
     }
-    setSlides((prev) => {
-      const index = prev.findIndex((slide) => slide.id === selectedSlideId);
-      if (index === -1) {
-        return prev;
-      }
-      const nextSlides = prev.filter((slide) => slide.id !== selectedSlideId);
-      const nextIndex = Math.max(0, Math.min(index, nextSlides.length - 1));
-      const nextSlide = nextSlides[nextIndex];
-      if (nextSlide) {
-        setSelectedSlideId(nextSlide.id);
-      }
-      return nextSlides;
-    });
+
+    if (!presentationId) {
+      setSlides((prev) => {
+        const index = prev.findIndex((slide) => slide.id === selectedSlideId);
+        if (index === -1) {
+          return prev;
+        }
+        const nextSlides = prev.filter((slide) => slide.id !== selectedSlideId);
+        const nextIndex = Math.max(0, Math.min(index, nextSlides.length - 1));
+        const nextSlide = nextSlides[nextIndex];
+        if (nextSlide) {
+          setSelectedSlideId(nextSlide.id);
+        }
+        return nextSlides;
+      });
+      return;
+    }
+
+    if (slides.length <= 1) {
+      console.warn("At least one slide must remain in the presentation.");
+      return;
+    }
+
+    const currentIndex = slides.findIndex((slide) => slide.id === selectedSlideId);
+    if (currentIndex === -1) {
+      return;
+    }
+
+    const previousSlide = slides[currentIndex - 1];
+    const nextSlideCandidate = slides[currentIndex + 1];
+    const nextSlide = previousSlide ?? nextSlideCandidate;
+
+    if (!nextSlide) {
+      console.warn("Unable to determine the next slide after deletion.");
+      return;
+    }
+
+    const slideIdToDelete = slides[currentIndex].id;
+
+    try {
+      const slideRef = doc(db, "presentations", presentationId, "slides", slideIdToDelete);
+      await deleteDoc(slideRef);
+      const currentUser = auth.currentUser;
+      await logAuditEvent({
+        presentationId,
+        userId: currentUser?.uid ?? null,
+        userEmail: currentUser?.email ?? null,
+        action: "DELETE_SLIDE",
+        details: { slideId: slideIdToDelete },
+      });
+    } catch (error) {
+      console.error("Failed to delete slide from Firestore:", error);
+      return;
+    }
+
+    setSlides((prev) => prev.filter((slide) => slide.id !== slideIdToDelete));
+    setSelectedSlideId(nextSlide.id);
+    router.push(
+      `/editor?presentationId=${encodeURIComponent(presentationId)}&slideId=${encodeURIComponent(nextSlide.id)}`
+    );
   };
 
   const moveSlide = (direction: "up" | "down") => {
@@ -1141,22 +1324,362 @@ export default function EditorPage({ params }: { params: { id: string } }) {
     moveSlide("down");
   };
 
-  const handleCommentSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleCommentSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const trimmed = newComment.trim();
     if (!trimmed) return;
-    const now = new Date();
-    setComments((prev) => [
-      {
-        id: `comment-${Date.now()}`,
-        author: "You",
-        message: trimmed,
-        timestamp: now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      },
-      ...prev,
-    ]);
-    setNewComment("");
+
+    if (!presentationId) {
+      const now = new Date();
+      setComments((prev) => [
+        {
+          id: `comment-${Date.now()}`,
+          author: "You",
+          message: trimmed,
+          timestamp: now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        },
+        ...prev,
+      ]);
+      setNewComment("");
+      return;
+    }
+
+    const currentUser = auth.currentUser;
+    const storedUser = storedUserRecord;
+    const userId =
+      currentUser?.uid ??
+      (typeof storedUser?.uid === "string" ? storedUser.uid : undefined) ??
+      (typeof storedUser?.id === "string" ? storedUser.id : undefined);
+    // Fetch displayName from Firestore
+    let userName = currentUser?.displayName || currentUser?.email || "User";
+    try {
+      if (userId) {
+        const userRef = doc(db, "users", userId);
+        const userSnap = await getDoc(userRef);
+        const userData = userSnap.data();
+        if (userData?.displayName) {
+          userName = userData.displayName;
+        } else if (userData?.email) {
+          userName = userData.email;
+        } else if (currentUser?.email) {
+          userName = currentUser.email;
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to fetch user displayName for comment:", err);
+      userName = currentUser?.email || (typeof storedUser?.email === "string" ? storedUser.email : undefined) || "User";
+    }
+
+    if (!userId) {
+      router.push("/login");
+      return;
+    }
+
+    try {
+      const encryptedText = encryptText(trimmed);
+      const commentRef = await addDoc(collection(db, "presentations", presentationId, "comments"), {
+        userId,
+        userName,
+        text: encryptedText,
+        createdAt: serverTimestamp(),
+      });
+      setNewComment("");
+
+      await logAuditEvent({
+        presentationId,
+        userId,
+        userEmail: currentUser?.email ?? null,
+        action: "ADD_COMMENT",
+        details: { commentId: commentRef.id },
+      });
+    } catch (error) {
+      console.error("Failed to add comment to Firestore:", error);
+    }
   };
+
+  const handleAddCollaborator = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!presentationId) return;
+    const rawValue = newCollaboratorValue.trim();
+    if (!rawValue) {
+      setTeamModalError("Enter a collaborator email or ID.");
+      return;
+    }
+    const normalizedValue = rawValue.includes("@") ? rawValue.toLowerCase() : rawValue;
+    if (
+      (presentationOwnerId && presentationOwnerId.toLowerCase() === normalizedValue.toLowerCase()) ||
+      collaboratorsLowerSet.has(normalizedValue.toLowerCase())
+    ) {
+      setTeamModalError("This member is already on the team.");
+      return;
+    }
+      const nextCollaborators = [...collaborators, normalizedValue];
+      try {
+        setIsUpdatingTeam(true);
+        // Update teamRoles to set new member as "editor"
+        const updatedRoles: Record<string, "owner" | "editor" | "viewer"> = { ...teamRoles, [normalizedValue]: "editor" };
+        await setDoc(
+          doc(db, "presentations", presentationId),
+          {
+            collaboratorIds: nextCollaborators,
+            teamRoles: updatedRoles,
+          },
+          { merge: true }
+        );
+        setTeamRoles(updatedRoles);
+      setPresentationCollaboratorIds(nextCollaborators);
+      // Fetch displayName for the newly added collaborator
+      try {
+        const collabRef = doc(db, "users", normalizedValue);
+        const collabSnap = await getDoc(collabRef);
+        if (collabSnap.exists()) {
+          const collabData = collabSnap.data();
+          setCollaboratorDisplayNames((prev) => ({
+            ...prev,
+            [normalizedValue]: collabData?.displayName || collabData?.email || normalizedValue,
+          }));
+        } else {
+          // If not found in users collection, treat as email/ID string
+          setCollaboratorDisplayNames((prev) => ({
+            ...prev,
+            [normalizedValue]: normalizedValue,
+          }));
+        }
+      } catch (err) {
+        console.warn(`Failed to fetch displayName for ${normalizedValue}:`, err);
+        setCollaboratorDisplayNames((prev) => ({
+          ...prev,
+          [normalizedValue]: normalizedValue,
+        }));
+      }
+      setNewCollaboratorValue("");
+      setTeamModalError(null);
+    } catch (error) {
+      console.error("Failed to add collaborator:", error);
+      setTeamModalError("Unable to add collaborator. Try again.");
+    } finally {
+      setIsUpdatingTeam(false);
+    }
+  };
+
+  const handleUpdateRole = async (member: string, newRole: "editor" | "viewer") => {
+    if (!presentationId) return;
+    try {
+      const updatedRoles: Record<string, "owner" | "editor" | "viewer"> = { ...teamRoles, [member]: newRole };
+      await setDoc(
+        doc(db, "presentations", presentationId),
+        {
+          teamRoles: updatedRoles,
+        },
+        { merge: true }
+      );
+      setTeamRoles(updatedRoles);
+    } catch (error) {
+      console.error("Failed to update role:", error);
+      setTeamModalError("Unable to update role. Try again.");
+    }
+  };
+
+  const handleRemoveCollaborator = async (member: string) => {
+    if (!presentationId) return;
+      const nextCollaborators = collaborators.filter((value) => value !== member);
+      try {
+        setIsUpdatingTeam(true);
+        // Remove from teamRoles
+        const updatedRoles: Record<string, "owner" | "editor" | "viewer"> = { ...teamRoles };
+        delete updatedRoles[member];
+        await setDoc(
+          doc(db, "presentations", presentationId),
+          {
+            collaboratorIds: nextCollaborators,
+            teamRoles: updatedRoles,
+          },
+          { merge: true }
+        );
+        setPresentationCollaboratorIds(nextCollaborators);
+        setTeamRoles(updatedRoles);
+      // Remove displayName from state
+      setCollaboratorDisplayNames((prev) => {
+        const updated = { ...prev };
+        delete updated[member];
+        return updated;
+      });
+      setTeamModalError(null);
+    } catch (error) {
+      console.error("Failed to remove collaborator:", error);
+      setTeamModalError("Unable to remove collaborator. Try again.");
+    } finally {
+      setIsUpdatingTeam(false);
+    }
+  };
+
+  const handleSaveVersion = useCallback(
+    async (summary?: string) => {
+      if (isSavingVersion) return;
+      if (!presentationId) return;
+
+      const currentUser = auth.currentUser;
+      const storedUser = storedUserRecord;
+      const userId =
+        currentUser?.uid ??
+        (typeof storedUser?.uid === "string" ? storedUser.uid : undefined) ??
+        (typeof storedUser?.id === "string" ? storedUser.id : undefined);
+
+      if (!userId) {
+        router.push("/login");
+        return;
+      }
+
+      const slidesSnapshot: VersionSnapshotSlide[] = slides.map((slide, index) => ({
+        slideId: slide.id,
+        order: slide.order ?? index + 1,
+        title: typeof slide.title === "string" ? slide.title : "",
+        encryptedContent: encryptText(typeof slide.subtitle === "string" ? slide.subtitle : ""),
+        encryptedNotes: encryptText(typeof slide.notes === "string" ? slide.notes : ""),
+        theme: slide.theme || "default",
+      }));
+
+      try {
+        setIsSavingVersion(true);
+        const versionRef = await addDoc(collection(db, "presentations", presentationId, "versions"), {
+          createdAt: serverTimestamp(),
+          createdBy: userId,
+          summary: summary && summary.trim().length > 0 ? summary.trim() : "",
+          slidesSnapshot,
+        });
+
+        await logAuditEvent({
+          presentationId,
+          userId,
+          userEmail: currentUser?.email ?? null,
+          action: "SAVE_VERSION",
+          details: {
+            versionId: versionRef.id,
+            slideCount: slidesSnapshot.length,
+          },
+        });
+      } catch (error) {
+        console.error("Failed to save presentation version:", error);
+      } finally {
+        setIsSavingVersion(false);
+      }
+    },
+    [isSavingVersion, presentationId, slides, user, router]
+  );
+
+  const handleRestoreVersion = useCallback(
+    async (versionId: string) => {
+      if (isRestoringVersion) return;
+      if (!presentationId) return;
+
+      const versionRecord = versions.find((record) => record.id === versionId);
+      if (!versionRecord) return;
+
+      const orderedSnapshot = versionRecord.slidesSnapshot
+        .slice()
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+      if (orderedSnapshot.length === 0) {
+        console.warn("Version snapshot is empty; nothing to restore.");
+        return;
+      }
+
+      const firstSlideId = orderedSnapshot[0]?.slideId;
+
+      try {
+        setIsRestoringVersion(true);
+
+        await Promise.all(
+          orderedSnapshot.map((snapshot) => {
+            const slideRef = doc(db, "presentations", presentationId, "slides", snapshot.slideId);
+            return setDoc(
+              slideRef,
+              {
+                order: snapshot.order,
+                title: snapshot.title,
+                content: snapshot.encryptedContent,
+                notes: snapshot.encryptedNotes,
+                theme: snapshot.theme || "default",
+                updatedAt: serverTimestamp(),
+              },
+              { merge: true }
+            );
+          })
+        );
+
+        const snapshotIds = new Set(orderedSnapshot.map((item) => item.slideId));
+        const slidesToDelete = slides.filter((slide) => !snapshotIds.has(slide.id));
+        await Promise.all(
+          slidesToDelete.map((slide) =>
+            deleteDoc(doc(db, "presentations", presentationId, "slides", slide.id))
+          )
+        );
+
+        const presentationRef = doc(db, "presentations", presentationId);
+        await setDoc(
+          presentationRef,
+          {
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+
+        if (firstSlideId) {
+          router.replace(
+            `/editor?presentationId=${encodeURIComponent(presentationId)}&slideId=${encodeURIComponent(firstSlideId)}`
+          );
+        }
+
+        setHasLoadedFromFirestore(false);
+        await loadFromFirestore({ force: true, selectSlideId: firstSlideId });
+        if (firstSlideId) {
+          setSelectedSlideId(firstSlideId);
+        }
+
+        await logAuditEvent({
+          presentationId,
+          userId: auth.currentUser?.uid ?? null,
+          userEmail: auth.currentUser?.email ?? null,
+          action: "RESTORE_VERSION",
+          details: {
+            versionId,
+            restoredSlideCount: orderedSnapshot.length,
+          },
+        });
+      } catch (error) {
+        console.error("Failed to restore version:", error);
+      } finally {
+        setIsRestoringVersion(false);
+      }
+    },
+    [isRestoringVersion, presentationId, versions, slides, router, loadFromFirestore]
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const extendedWindow = window as typeof window & {
+      __editorVersions?: {
+        saveVersion: (summary?: string) => Promise<void>;
+        restoreVersion: (versionId: string) => Promise<void>;
+        getVersions: () => PresentationVersion[];
+        isSavingVersion: boolean;
+        isRestoringVersion: boolean;
+      };
+    };
+
+    extendedWindow.__editorVersions = {
+      saveVersion: handleSaveVersion,
+      restoreVersion: handleRestoreVersion,
+      getVersions: () => versions,
+      isSavingVersion,
+      isRestoringVersion,
+    };
+
+    return () => {
+      delete extendedWindow.__editorVersions;
+    };
+  }, [handleSaveVersion, handleRestoreVersion, versions, isSavingVersion, isRestoringVersion]);
 
   const toolbarDisabled = selectedSlide == null || status === "final";
 
@@ -1165,134 +1688,14 @@ export default function EditorPage({ params }: { params: { id: string } }) {
       ? {}
       : { backgroundColor: commandState.highlight };
 
-  // Image handler - opens file picker and inserts image into content
-  const handleImageClick = useCallback(() => {
-    if (isReadOnly) return;
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = "image/*";
-    input.onchange = (event) => {
-      const file = (event.target as HTMLInputElement).files?.[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const imageUrl = e.target?.result as string;
-        // Insert image into the active editable field
-        if (isEditableField && restoreSelection()) {
-          const img = document.createElement("img");
-          img.src = imageUrl;
-          img.style.maxWidth = "100%";
-          img.style.height = "auto";
-          img.style.display = "block";
-          img.style.margin = "8px 0";
-          document.execCommand("insertHTML", false, img.outerHTML);
-          syncActiveFieldContent(activeField);
-          syncCommandState();
-        } else {
-          // If no active field, set as background
-          setSlides((prev) => {
-            const newSlides = prev.map((slide) =>
-              slide.id === selectedSlideId ? { ...slide, backgroundImage: imageUrl } : slide
-            );
-            saveToHistory(newSlides);
-            return newSlides;
-          });
-        }
-      };
-      reader.readAsDataURL(file);
-    };
-    input.click();
-  }, [selectedSlideId, isReadOnly, saveToHistory, isEditableField, activeField, restoreSelection, syncActiveFieldContent, syncCommandState]);
-
-  // Background handler - opens color/image picker
-  const handleBackgroundClick = useCallback(() => {
-    if (isReadOnly) return;
-    setIsBackgroundPickerOpen((prev) => !prev);
-  }, [isReadOnly]);
-
-  const handleBackgroundColorSelect = useCallback((color: string) => {
-    setSlides((prev) => {
-      const newSlides = prev.map((slide) =>
-        slide.id === selectedSlideId ? { ...slide, backgroundColor: color, backgroundImage: undefined } : slide
-      );
-      saveToHistory(newSlides);
-      return newSlides;
-    });
-    setIsBackgroundPickerOpen(false);
-  }, [selectedSlideId, saveToHistory]);
-
-  const handleBackgroundImageSelect = useCallback(() => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = "image/*";
-    input.onchange = (event) => {
-      const file = (event.target as HTMLInputElement).files?.[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const imageUrl = e.target?.result as string;
-        setSlides((prev) => {
-          const newSlides = prev.map((slide) =>
-            slide.id === selectedSlideId ? { ...slide, backgroundImage: imageUrl, backgroundColor: undefined } : slide
-          );
-          saveToHistory(newSlides);
-          return newSlides;
-        });
-      };
-      reader.readAsDataURL(file);
-    };
-    input.click();
-    setIsBackgroundPickerOpen(false);
-  }, [selectedSlideId, saveToHistory]);
-
-  // Layout handler - cycles through layouts
-  const handleLayoutClick = useCallback(() => {
-    if (isReadOnly) return;
-    setIsLayoutPickerOpen((prev) => !prev);
-  }, [isReadOnly]);
-
-  const handleLayoutSelect = useCallback((layout: "title-only" | "title-subtitle" | "title-content" | "blank") => {
-    setSlides((prev) => {
-      const newSlides = prev.map((slide) =>
-        slide.id === selectedSlideId ? { ...slide, layout } : slide
-      );
-      saveToHistory(newSlides);
-      return newSlides;
-    });
-    setIsLayoutPickerOpen(false);
-  }, [selectedSlideId, saveToHistory]);
-
-  // Theme handler - toggles theme picker (already implemented)
-  const handleThemeClick = useCallback(() => {
-    if (isReadOnly) return;
-    toggleThemePicker();
-  }, [isReadOnly, toggleThemePicker]);
-
-  // Transition handler - opens transition picker
-  const handleTransitionClick = useCallback(() => {
-    if (isReadOnly) return;
-    setIsTransitionPickerOpen((prev) => !prev);
-  }, [isReadOnly]);
-
-  const handleTransitionSelect = useCallback((transition: "none" | "fade" | "slide" | "zoom") => {
-    setSlides((prev) => {
-      const newSlides = prev.map((slide) =>
-        slide.id === selectedSlideId ? { ...slide, transition } : slide
-      );
-      saveToHistory(newSlides);
-      return newSlides;
-    });
-    setIsTransitionPickerOpen(false);
-  }, [selectedSlideId, saveToHistory]);
-
   const toolbarActions: Record<string, () => void> = {
     Undo: applyUndo,
     Redo: applyRedo,
-    Image: handleImageClick,
-    Background: handleBackgroundClick,
-    Layout: handleLayoutClick,
-    Theme: handleThemeClick,
-    Transition: handleTransitionClick,
+    Image: () => undefined,
+    Background: () => undefined,
+    Layout: () => undefined,
+    Theme: () => undefined,
+    Transition: () => undefined,
   };
 
   const currentFormatting = selectedSlide ? ensureFormatting(selectedSlide.formatting) : DEFAULT_FORMATTING;
@@ -1327,8 +1730,40 @@ export default function EditorPage({ params }: { params: { id: string } }) {
     router.push("/viewer");
   };
 
+  const toggleColorPicker = () => setIsColorPickerOpen((prev) => !prev);
+  const toggleHighlightPicker = () => setIsHighlightPickerOpen((prev) => !prev);
+  const toggleThemePicker = () => setIsThemePickerOpen((prev) => !prev);
   const currentLineHeight =
     currentFormatting[activeField]?.lineHeight ?? DEFAULT_FORMATTING[activeField]?.lineHeight ?? 1.2;
+
+  const isReadOnly = status === "final";
+
+  const resolvedUserId = firebaseUserId ?? (typeof storedUserRecord?.uid === "string" ? storedUserRecord.uid : null);
+  const resolvedUserEmail =
+    firebaseUserEmail ?? (typeof storedUserRecord?.email === "string" ? storedUserRecord.email : null);
+  const collaborators = useMemo(
+    () => (Array.isArray(presentationCollaboratorIds) ? presentationCollaboratorIds : []),
+    [presentationCollaboratorIds]
+  );
+  const collaboratorsLowerSet = useMemo(
+    () => new Set(collaborators.map((value) => (typeof value === "string" ? value.toLowerCase() : value))),
+    [collaborators]
+  );
+  const canChat = useMemo(() => {
+    if (!presentationId) return false;
+    if (presentationOwnerId && resolvedUserId && resolvedUserId === presentationOwnerId) return true;
+    if (resolvedUserId && (collaborators.includes(resolvedUserId) || collaboratorsLowerSet.has(resolvedUserId.toLowerCase()))) {
+      return true;
+    }
+    if (resolvedUserEmail) {
+      const emailLower = resolvedUserEmail.toLowerCase();
+      if (collaborators.includes(resolvedUserEmail) || collaboratorsLowerSet.has(emailLower)) {
+        return true;
+      }
+    }
+    return false;
+  }, [presentationId, presentationOwnerId, resolvedUserId, resolvedUserEmail, collaborators, collaboratorsLowerSet]);
+  const isOwner = Boolean(presentationOwnerId && resolvedUserId && resolvedUserId === presentationOwnerId);
 
   return (
     <>
@@ -1398,16 +1833,58 @@ export default function EditorPage({ params }: { params: { id: string } }) {
             </button>
           ) : null}
           {!loading && user ? (
-            <button
-              className={styles.secondary}
-              type="button"
-              onClick={async () => {
-                await signOut(auth);
-                router.push("/login");
-              }}
-            >
-              Sign out
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => router.push("/profile")}
+                style={{
+                  width: "40px",
+                  height: "40px",
+                  borderRadius: "50%",
+                  background: "#E5F4F1",
+                  border: "none",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer",
+                  fontSize: "16px",
+                  fontWeight: 500,
+                  color: "#2b6a64",
+                  transition: "transform 0.15s ease, box-shadow 0.15s ease",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = "scale(1.05)";
+                  e.currentTarget.style.boxShadow = "0 2px 8px rgba(0, 0, 0, 0.15)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = "scale(1)";
+                  e.currentTarget.style.boxShadow = "none";
+                }}
+                aria-label="Profile"
+              >
+                {(() => {
+                  const userRecord = user as Record<string, unknown>;
+                  const displayName = typeof userRecord.displayName === "string" ? userRecord.displayName : null;
+                  const email = typeof userRecord.email === "string" ? userRecord.email : null;
+                  const initial = displayName
+                    ? displayName.charAt(0).toUpperCase()
+                    : email
+                    ? email.charAt(0).toUpperCase()
+                    : "U";
+                  return initial;
+                })()}
+              </button>
+              <button
+                className={styles.secondary}
+                type="button"
+                onClick={async () => {
+                  await signOut(auth);
+                  router.push("/login");
+                }}
+              >
+                Sign out
+              </button>
+            </>
           ) : null}
         </div>
       </nav>
@@ -1480,12 +1957,41 @@ export default function EditorPage({ params }: { params: { id: string } }) {
                   >
                     Back to Home
                   </button>
+                  {isOwner ? (
+                    <button
+                      type="button"
+                      className={styles.slideshowButton}
+                      onClick={() => {
+                        setTeamModalError(null);
+                        setNewCollaboratorValue("");
+                        setIsTeamModalOpen(true);
+                      }}
+                    >
+                      Manage Team
+                    </button>
+                  ) : null}
                   <button type="button" className={styles.shareButton}>
                     Share
                   </button>
                   <button type="button" className={styles.slideshowButton} onClick={handleOpenSlideshow}>
                     Slideshow
                   </button>
+                  {presentationId ? (
+                    <button
+                      type="button"
+                      className={styles.slideshowButton}
+                      onClick={() =>
+                        router.push(
+                          `/present?presentationId=${encodeURIComponent(presentationId)}&slideIndex=${Math.max(
+                            slides.findIndex((slide) => slide.id === selectedSlideId),
+                            0
+                          )}`
+                        )
+                      }
+                    >
+                      Present
+                    </button>
+                  ) : null}
                 </div>
               </div>
             </header>
@@ -1522,8 +2028,6 @@ export default function EditorPage({ params }: { params: { id: string } }) {
                   onAlign={applyAlign}
                   onList={applyList}
                   onLineHeightChange={applyLineHeight}
-                  onLetterSpacingChange={activeField === "title" ? applyLetterSpacing : undefined}
-                  letterSpacingValue={activeField === "title" ? ensureTitleStyle(selectedSlide?.titleStyle).letterSpacing : 0}
                   onUndo={applyUndo}
                   onRedo={applyRedo}
                   onToolbarMouseDown={handleToolbarMouseDown}
@@ -1572,15 +2076,7 @@ export default function EditorPage({ params }: { params: { id: string } }) {
 
                 <section className={styles.canvasRegion}>
                   <div className={styles.canvasShell}>
-                    <div 
-                      className={styles.canvasSurface}
-                      style={{
-                        backgroundImage: selectedSlide?.backgroundImage ? `url(${selectedSlide.backgroundImage})` : undefined,
-                        backgroundColor: selectedSlide?.backgroundColor || undefined,
-                        backgroundSize: selectedSlide?.backgroundImage ? "cover" : undefined,
-                        backgroundPosition: selectedSlide?.backgroundImage ? "center" : undefined,
-                      }}
-                    >
+                    <div className={styles.canvasSurface}>
                     <div
                       ref={titleRef}
                       className={styles.slideTitleInput}
@@ -1591,7 +2087,6 @@ export default function EditorPage({ params }: { params: { id: string } }) {
                       onInput={() => handleContentInput("title")}
                       onFocus={() => handleContentFocus("title")}
                       onBlur={() => handleContentBlur("title")}
-                      onMouseDown={handleTitleMouseDown}
                       style={getTextStyle("title")}
                       data-readonly={isReadOnly}
                     />
@@ -1675,82 +2170,6 @@ export default function EditorPage({ params }: { params: { id: string } }) {
 
               <section className={styles.bottomSection}>
                 <div className={styles.bottomGrid}>
-                  {activeField === "title" && (
-                    <section className={`${styles.bottomCard} ${styles.animationPanel}`}>
-                      <header className={styles.bottomCardHeader}>
-                        <div>
-                          <h2 className="text-xl font-semibold text-cyan-700">Title Animation</h2>
-                          <p className="text-sm text-gray-600">Control animation for the slide title.</p>
-                        </div>
-                      </header>
-                      <div className={styles.animationControls}>
-                        <div className={styles.animationRow}>
-                          <label htmlFor="animation-type">Animation Type:</label>
-                          <select
-                            id="animation-type"
-                            value={ensureTitleAnimation(selectedSlide?.titleAnimation).type}
-                            onChange={(e) => updateSlideTitleAnimation({ type: e.target.value as TitleAnimation["type"] })}
-                            disabled={isReadOnly}
-                          >
-                            <option value="none">None</option>
-                            <option value="fade-in">Fade In</option>
-                            <option value="slide-in">Slide In</option>
-                            <option value="marquee">Marquee</option>
-                          </select>
-                        </div>
-                        <div className={styles.animationRow}>
-                          <label htmlFor="animation-duration">Duration (seconds):</label>
-                          <input
-                            id="animation-duration"
-                            type="number"
-                            min="0.1"
-                            max="10"
-                            step="0.1"
-                            value={ensureTitleAnimation(selectedSlide?.titleAnimation).duration}
-                            onChange={(e) => updateSlideTitleAnimation({ duration: parseFloat(e.target.value) || 1 })}
-                            disabled={isReadOnly}
-                          />
-                        </div>
-                        <div className={styles.animationRow}>
-                          <label>
-                            <input
-                              type="checkbox"
-                              checked={ensureTitleAnimation(selectedSlide?.titleAnimation).loop}
-                              onChange={(e) => updateSlideTitleAnimation({ loop: e.target.checked })}
-                              disabled={isReadOnly}
-                            />
-                            Loop animation
-                          </label>
-                        </div>
-                        <div className={styles.animationButtons}>
-                          <button
-                            type="button"
-                            onClick={startAnimation}
-                            disabled={isReadOnly || ensureTitleAnimation(selectedSlide?.titleAnimation).type === "none"}
-                            className={styles.animationButton}
-                          >
-                            Preview
-                          </button>
-                          <button
-                            type="button"
-                            onClick={pauseAnimation}
-                            disabled={!isAnimating || isReadOnly}
-                            className={styles.animationButton}
-                          >
-                            {animationPaused ? "Resume" : "Pause"}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={stopAnimation}
-                            disabled={!isAnimating || isReadOnly}
-                            className={styles.animationButton}
-                          >
-                            Stop
-                          </button>
-                        </div>
-                      </div>
-                    </section>
-                  )}
                   <section className={`${styles.bottomCard} ${styles.commentsPanel}`}>
                     <header className={styles.bottomCardHeader}>
                       <div>
@@ -1796,163 +2215,124 @@ export default function EditorPage({ params }: { params: { id: string } }) {
         </div>
       </main>
 
-      {/* Background Picker Dropdown */}
-      {isBackgroundPickerOpen && !toolbarDisabled && typeof window !== "undefined" ? createPortal(
-        <div
-          className={styles.backgroundDropdown}
-          style={{
-            position: "fixed",
-            top: "50%",
-            left: "50%",
-            transform: "translate(-50%, -50%)",
-            zIndex: 1000,
-            background: "white",
-            padding: "20px",
-            borderRadius: "12px",
-            boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
-            minWidth: "300px",
-          }}
-        >
-          <h3 style={{ margin: "0 0 16px 0", fontSize: "16px", fontWeight: 600 }}>Background</h3>
-          <div style={{ display: "grid", gap: "12px" }}>
-            <div>
-              <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: 500 }}>Color</label>
-              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                {["#ffffff", "#f3f4f6", "#e5e7eb", "#d1d5db", "#9ca3af", "#6b7280", "#374151", "#1f2937", "#111827"].map((color) => (
-                  <button
-                    key={color}
-                    type="button"
-                    onClick={() => handleBackgroundColorSelect(color)}
-                    style={{
-                      width: "40px",
-                      height: "40px",
-                      borderRadius: "8px",
-                      border: "2px solid #e5e7eb",
-                      background: color,
-                      cursor: "pointer",
-                    }}
-                    aria-label={`Select ${color}`}
-                  />
-                ))}
-              </div>
+      {isTeamModalOpen ? (
+        <div className={styles.teamModalOverlay} role="dialog" aria-modal="true" aria-labelledby="team-management-title">
+          <div className={styles.teamModal}>
+            <div className={styles.teamModalHeader}>
+              <h2 id="team-management-title">Manage Team</h2>
+              <button
+                type="button"
+                className={styles.teamModalClose}
+                onClick={() => {
+                  if (isUpdatingTeam) return;
+                  setIsTeamModalOpen(false);
+                }}
+                aria-label="Close team management"
+              >
+                ✕
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={handleBackgroundImageSelect}
-              style={{
-                padding: "12px",
-                borderRadius: "8px",
-                border: "1px solid #d1d5db",
-                background: "#f9fafb",
-                cursor: "pointer",
-                fontSize: "14px",
-                fontWeight: 500,
-              }}
-            >
-              Upload Image
-            </button>
+
+            <div className={styles.teamModalSection}>
+              <h3 className={styles.teamSectionTitle}>Current Members</h3>
+              <ul className={styles.teamMemberList}>
+                <li className={styles.teamMemberRow}>
+                  <div>
+                    <span className={styles.teamMemberName}>
+                      {ownerDisplayName || presentationOwnerId || "Owner"}
+                    </span>
+                    <span
+                      style={{
+                        display: "inline-block",
+                        padding: "2px 8px",
+                        borderRadius: "12px",
+                        fontSize: "11px",
+                        fontWeight: 600,
+                        backgroundColor: "#E5F4F1",
+                        color: "#2b6a64",
+                        marginLeft: "8px",
+                      }}
+                    >
+                      Owner
+                    </span>
+                  </div>
+                </li>
+                {collaborators.length === 0 ? (
+                  <li className={styles.teamMemberEmpty}>No collaborators yet.</li>
+                ) : (
+                  collaborators.map((member) => {
+                    const displayName = collaboratorDisplayNames[member] || member;
+                    const currentRole = teamRoles[member] || "editor";
+                    return (
+                      <li key={member} className={styles.teamMemberRow}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "12px", flex: 1 }}>
+                          <div>
+                            <span className={styles.teamMemberName}>{displayName}</span>
+                          </div>
+                          <select
+                            value={currentRole}
+                            onChange={(e) => {
+                              const newRole = e.target.value as "editor" | "viewer";
+                              void handleUpdateRole(member, newRole);
+                            }}
+                            disabled={isUpdatingTeam}
+                            style={{
+                              padding: "4px 8px",
+                              borderRadius: "6px",
+                              border: "1px solid rgba(0, 0, 0, 0.1)",
+                              fontSize: "12px",
+                              backgroundColor: "#ffffff",
+                              color: "#202124",
+                              cursor: isUpdatingTeam ? "not-allowed" : "pointer",
+                            }}
+                          >
+                            <option value="editor">Editor</option>
+                            <option value="viewer">Viewer</option>
+                          </select>
+                        </div>
+                        <button
+                          type="button"
+                          className={styles.teamRemoveButton}
+                          onClick={() => handleRemoveCollaborator(member)}
+                          disabled={isUpdatingTeam}
+                        >
+                          Remove
+                        </button>
+                      </li>
+                    );
+                  })
+                )}
+              </ul>
+            </div>
+
+            <form className={styles.teamAddForm} onSubmit={handleAddCollaborator}>
+              <label htmlFor="team-collaborator-input" className={styles.teamInputLabel}>
+                Invite collaborator by email or ID
+              </label>
+              <div className={styles.teamInputRow}>
+                <input
+                  id="team-collaborator-input"
+                  type="text"
+                  className={styles.teamInput}
+                  placeholder="member@example.com"
+                  value={newCollaboratorValue}
+                  onChange={(event) => setNewCollaboratorValue(event.target.value)}
+                  disabled={isUpdatingTeam}
+                />
+                <button type="submit" className={styles.teamAddButton} disabled={isUpdatingTeam}>
+                  {isUpdatingTeam ? "Adding…" : "Add Member"}
+                </button>
+              </div>
+              {teamModalError ? <p className={styles.teamError}>{teamModalError}</p> : null}
+              <p className={styles.teamHint}>
+                Owners and collaborators can participate in live chat, comments, and version history.
+              </p>
+            </form>
           </div>
-        </div>,
-        document.body
+        </div>
       ) : null}
 
-      {/* Layout Picker Dropdown */}
-      {isLayoutPickerOpen && !toolbarDisabled && typeof window !== "undefined" ? createPortal(
-        <div
-          className={styles.layoutDropdown}
-          style={{
-            position: "fixed",
-            top: "50%",
-            left: "50%",
-            transform: "translate(-50%, -50%)",
-            zIndex: 1000,
-            background: "white",
-            padding: "20px",
-            borderRadius: "12px",
-            boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
-            minWidth: "250px",
-          }}
-        >
-          <h3 style={{ margin: "0 0 16px 0", fontSize: "16px", fontWeight: 600 }}>Layout</h3>
-          <div style={{ display: "grid", gap: "8px" }}>
-            {[
-              { value: "title-only" as const, label: "Title Only" },
-              { value: "title-subtitle" as const, label: "Title & Subtitle" },
-              { value: "title-content" as const, label: "Title & Content" },
-              { value: "blank" as const, label: "Blank" },
-            ].map((layout) => (
-              <button
-                key={layout.value}
-                type="button"
-                onClick={() => handleLayoutSelect(layout.value)}
-                style={{
-                  padding: "12px",
-                  borderRadius: "8px",
-                  border: selectedSlide?.layout === layout.value ? "2px solid #56c1b0" : "1px solid #d1d5db",
-                  background: selectedSlide?.layout === layout.value ? "#f0fdfa" : "white",
-                  cursor: "pointer",
-                  fontSize: "14px",
-                  fontWeight: selectedSlide?.layout === layout.value ? 600 : 400,
-                  textAlign: "left",
-                }}
-              >
-                {layout.label}
-              </button>
-            ))}
-          </div>
-        </div>,
-        document.body
-      ) : null}
-
-      {/* Transition Picker Dropdown */}
-      {isTransitionPickerOpen && !toolbarDisabled && typeof window !== "undefined" ? createPortal(
-        <div
-          className={styles.transitionDropdown}
-          style={{
-            position: "fixed",
-            top: "50%",
-            left: "50%",
-            transform: "translate(-50%, -50%)",
-            zIndex: 1000,
-            background: "white",
-            padding: "20px",
-            borderRadius: "12px",
-            boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
-            minWidth: "250px",
-          }}
-        >
-          <h3 style={{ margin: "0 0 16px 0", fontSize: "16px", fontWeight: 600 }}>Transition</h3>
-          <div style={{ display: "grid", gap: "8px" }}>
-            {[
-              { value: "none" as const, label: "None" },
-              { value: "fade" as const, label: "Fade" },
-              { value: "slide" as const, label: "Slide" },
-              { value: "zoom" as const, label: "Zoom" },
-            ].map((transition) => (
-              <button
-                key={transition.value}
-                type="button"
-                onClick={() => handleTransitionSelect(transition.value)}
-                style={{
-                  padding: "12px",
-                  borderRadius: "8px",
-                  border: selectedSlide?.transition === transition.value ? "2px solid #56c1b0" : "1px solid #d1d5db",
-                  background: selectedSlide?.transition === transition.value ? "#f0fdfa" : "white",
-                  cursor: "pointer",
-                  fontSize: "14px",
-                  fontWeight: selectedSlide?.transition === transition.value ? 600 : 400,
-                  textAlign: "left",
-                }}
-              >
-                {transition.label}
-              </button>
-            ))}
-          </div>
-        </div>,
-        document.body
-      ) : null}
-
-      <TeamChatWidget />
+      <TeamChatWidget presentationId={presentationId} canChat={canChat} teamRoles={teamRoles} ownerId={presentationOwnerId} />
     </>
   );
 }
