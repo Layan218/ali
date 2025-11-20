@@ -741,116 +741,224 @@
   }
 }
 
-@media (prefers-color-scheme: dark) {
-  .nav {
-    background: #0f172a;
-    border-bottom-color: rgba(255, 255, 255, 0.08);
-  }
+:global(.dark) .nav {
+  background: #0f172a;
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
 
-  .navLink {
-    color: #f8fafc;
-  }
+:global(.dark) .navLink {
+  color: #f8fafc;
+}
 
-  .navLink:hover {
-    color: #e2e8f0;
-  }
+:global(.dark) .navLink:hover {
+  color: #e2e8f0;
+}
 
-  .themeToggle {
-    background: #0f172a;
-    color: #f8fafc;
-    border-color: rgba(255, 255, 255, 0.15);
-  }
+:global(.dark) .navLinkActive {
+  color: #67e8f9;
+}
 
-  .main {
-    background: linear-gradient(180deg, #0f172a 0%, #0b1325 55%, #090f1f 100%);
-  }
+:global(.dark) .navLinkActive::after {
+  background: linear-gradient(135deg, #67e8f9, #3cc8b6);
+}
 
-  .main::before {
-    opacity: 0.32;
-    background:
-      radial-gradient(120% 60% at 110% 20%, rgba(56, 189, 184, 0.24) 0%, rgba(56, 189, 184, 0) 70%),
-      radial-gradient(90% 45% at -10% 10%, rgba(22, 163, 190, 0.24) 0%, rgba(22, 163, 190, 0) 80%),
-      radial-gradient(70% 35% at 50% 95%, rgba(14, 165, 233, 0.18) 0%, rgba(14, 165, 233, 0) 70%);
-  }
+:global(.dark) .themeToggle {
+  background: #0f172a;
+  color: #f8fafc;
+  border-color: rgba(255, 255, 255, 0.15);
+}
 
-  .container,
-  .heading,
-  .subheading {
-    color: #e2e8f0;
-  }
+:global(.dark) .primary {
+  background: #56c1b0;
+  color: #06151b;
+}
 
-  .card,
-  .commentCard,
-  .auditItem {
-    background: rgba(15, 23, 42, 0.92);
-    border-color: rgba(148, 163, 184, 0.22);
-    box-shadow: 0 22px 48px rgba(2, 6, 23, 0.55);
-  }
+:global(.dark) .primary:hover {
+  background: #4bb29f;
+}
 
-  .subheading,
-  .commentMeta,
-  .auditMeta,
-  .rowTitle span:last-of-type {
-    color: #cbd5f5;
-  }
+:global(.dark) .secondary {
+  color: #67e8f9;
+  border-color: #67e8f9;
+}
 
-  .tableRow:nth-child(even) {
-    background: rgba(30, 41, 59, 0.72);
-  }
+:global(.dark) .secondary:hover {
+  background: rgba(56, 189, 248, 0.15);
+}
 
-  .tableRow {
-    background: rgba(15, 23, 42, 0.82);
-  }
+:global(.dark) .main {
+  background: linear-gradient(180deg, #0f172a 0%, #0b1325 55%, #090f1f 100%);
+}
 
-  .tableHeaderRow {
-    background: rgba(86, 193, 176, 0.26);
-    color: #f8fafc;
-  }
+:global(.dark) .main::before {
+  opacity: 0.32;
+  background:
+    radial-gradient(120% 60% at 110% 20%, rgba(56, 189, 184, 0.24) 0%, rgba(56, 189, 184, 0) 70%),
+    radial-gradient(90% 45% at -10% 10%, rgba(22, 163, 190, 0.24) 0%, rgba(22, 163, 190, 0) 80%),
+    radial-gradient(70% 35% at 50% 95%, rgba(14, 165, 233, 0.18) 0%, rgba(14, 165, 233, 0) 70%);
+}
 
-  .ghostButton {
-    background: rgba(71, 85, 105, 0.4);
-    color: #f8fafc;
-  }
+:global(.dark) .container,
+:global(.dark) .heading,
+:global(.dark) .subheading {
+  color: #e2e8f0;
+}
 
-  .ghostButton:hover {
-    background: rgba(148, 163, 184, 0.4);
-  }
+:global(.dark) .card,
+:global(.dark) .commentCard,
+:global(.dark) .auditItem {
+  background: rgba(15, 23, 42, 0.92);
+  border-color: rgba(148, 163, 184, 0.22);
+  box-shadow: 0 22px 48px rgba(2, 6, 23, 0.55);
+}
 
-  .outlineButton {
-    color: #56c1b0;
-    border-color: rgba(86, 193, 176, 0.6);
-  }
+:global(.dark) .subheading,
+:global(.dark) .commentMeta,
+:global(.dark) .auditMeta,
+:global(.dark) .rowTitle span:last-of-type {
+  color: #cbd5f5;
+}
 
-  .chatBox {
-    background: rgba(15, 23, 42, 0.92);
-    border-color: rgba(148, 163, 184, 0.22);
-    box-shadow: 0 26px 52px rgba(2, 6, 23, 0.6);
-  }
+:global(.dark) .tableRow:nth-child(even) {
+  background: rgba(30, 41, 59, 0.72);
+}
 
-  .chatMessages {
-    background: rgba(30, 41, 59, 0.85);
-  }
+:global(.dark) .tableRow {
+  background: rgba(15, 23, 42, 0.82);
+  color: #e2e8f0;
+}
 
-  .chatMessage {
-    background: rgba(15, 23, 42, 0.82);
-    border-color: rgba(148, 163, 184, 0.2);
-  }
+:global(.dark) .tableRow:hover {
+  background: rgba(56, 189, 248, 0.18);
+}
 
-  .chatTimestamp {
-    color: #cbd5f5;
-  }
+:global(.dark) .tableRowActive {
+  background: rgba(56, 189, 248, 0.24);
+  outline-color: rgba(56, 189, 248, 0.5);
+}
 
-  .chatToggleButton {
-    background: linear-gradient(135deg, #3ca48f 0%, #1f6f5f 100%);
-    box-shadow: 0 20px 40px rgba(8, 15, 35, 0.6);
-  }
+:global(.dark) .tableHeaderRow {
+  background: rgba(86, 193, 176, 0.26);
+  color: #f8fafc;
+}
 
-  .chatBadge {
-    border-color: #0f172a;
-  }
+:global(.dark) .slidesTable {
+  background: rgba(14, 26, 36, 0.85);
+  border-color: rgba(56, 189, 248, 0.25);
+}
 
-  .footer {
-    color: #cbd5f5;
-  }
+:global(.dark) .ghostButton {
+  background: rgba(71, 85, 105, 0.4);
+  color: #f8fafc;
+}
+
+:global(.dark) .ghostButton:hover {
+  background: rgba(148, 163, 184, 0.4);
+}
+
+:global(.dark) .outlineButton {
+  color: #56c1b0;
+  border-color: rgba(86, 193, 176, 0.6);
+}
+
+:global(.dark) .outlineButton:hover {
+  background: rgba(56, 189, 248, 0.15);
+}
+
+:global(.dark) .emptyState {
+  color: rgba(226, 232, 240, 0.7);
+}
+
+:global(.dark) .commentText {
+  color: #e2e8f0;
+}
+
+:global(.dark) .commentComposer textarea {
+  background: rgba(15, 23, 42, 0.85);
+  border-color: rgba(148, 163, 184, 0.28);
+  color: #e2e8f0;
+}
+
+:global(.dark) .commentComposer textarea:focus {
+  border-color: rgba(56, 189, 248, 0.5);
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.25);
+}
+
+:global(.dark) .auditPrimary {
+  color: #e2e8f0;
+}
+
+:global(.dark) .auditPrimary span {
+  color: #67e8f9;
+}
+
+:global(.dark) .chatBox {
+  background: rgba(15, 23, 42, 0.92);
+  border-color: rgba(148, 163, 184, 0.22);
+  box-shadow: 0 26px 52px rgba(2, 6, 23, 0.6);
+}
+
+:global(.dark) .chatMessages {
+  background: rgba(30, 41, 59, 0.85);
+}
+
+:global(.dark) .chatMessage {
+  background: rgba(15, 23, 42, 0.82);
+  border-color: rgba(148, 163, 184, 0.2);
+  color: #e2e8f0;
+}
+
+:global(.dark) .chatTimestamp {
+  color: #cbd5f5;
+}
+
+:global(.dark) .chatComposer textarea {
+  background: rgba(15, 23, 42, 0.85);
+  border-color: rgba(148, 163, 184, 0.28);
+  color: #e2e8f0;
+}
+
+:global(.dark) .chatToggleButton {
+  background: linear-gradient(135deg, #3ca48f 0%, #1f6f5f 100%);
+  box-shadow: 0 20px 40px rgba(8, 15, 35, 0.6);
+}
+
+:global(.dark) .chatBadge {
+  border-color: #0f172a;
+}
+
+:global(.dark) .footer {
+  color: #cbd5f5;
+}
+
+.commentInfo {
+  margin: 0;
+  color: #5f6368;
+}
+
+:global(.dark) .commentInfo {
+  color: rgba(226, 232, 240, 0.7);
+}
+
+:global(.dark) .commentInfo strong {
+  color: #e2e8f0;
+}
+
+.auditSlideTitle {
+  color: #2b6a64;
+}
+
+:global(.dark) .auditSlideTitle {
+  color: #67e8f9;
+}
+
+:global(.dark) .slidesHeader h2,
+:global(.dark) .commentsPanel h2,
+:global(.dark) .auditSection h2 {
+  color: #e2e8f0;
+}
+
+:global(.dark) .rowTitle span:first-of-type {
+  color: #e2e8f0;
 }
 

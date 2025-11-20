@@ -22,6 +22,7 @@ import {
 import { encryptText, decryptText } from "@/lib/encryption";
 import { logAuditEvent } from "@/lib/audit";
 import { useAuth } from "@/context/AuthContext";
+import { useTheme } from "@/hooks/useTheme";
 import TeamChatWidget from "@/components/TeamChatWidget";
 import styles from "./editor.module.css";
 import EditorToolbar from "@/components/EditorToolbar";
@@ -30,6 +31,8 @@ import {
   readPresentationMeta,
   updatePresentationStatus,
 } from "@/lib/presentationMeta";
+import { AITemplateConfig, getAITemplateStyles } from "@/lib/aiTemplate";
+import { themes as presentationThemes, getThemeByName, type PresentationTheme } from "@/lib/presentationThemes";
 
 const VIEWER_RETURN_KEY = "viewer-return-url";
 const VIEWER_STATE_KEY = "viewer-state";
@@ -46,8 +49,10 @@ type SlideData = {
   order?: number;
   title: string;
   subtitle: string;
+  content?: string; // For AI template slides
   notes: string;
   theme: string;
+  templateId?: string; // AI template identifier
   formatting: SlideFormatting;
 };
 
@@ -165,10 +170,10 @@ const fieldKeyMap: Record<FieldKey, keyof SlideData> = {
 };
 
 const themes: ThemeOption[] = [
-  { name: "Aramco Classic", swatch: "linear-gradient(135deg, #56c1b0 0%, #c7f4ec 100%)" },
-  { name: "Desert Dusk", swatch: "linear-gradient(135deg, #f97316 0%, #fde68a 100%)" },
-  { name: "Executive Slate", swatch: "linear-gradient(135deg, #1e293b 0%, #94a3b8 100%)" },
-  { name: "Innovation Sky", swatch: "linear-gradient(135deg, #38bdf8 0%, #dbeafe 100%)" },
+  { name: "Aramco Classic", swatch: "linear-gradient(135deg, #0d9488 0%, #5eead4 100%)" },
+  { name: "Desert Dusk", swatch: "linear-gradient(135deg, #d97706 0%, #fde68a 100%)" },
+  { name: "Executive Slate", swatch: "linear-gradient(135deg, #1e293b 0%, #64748b 100%)" },
+  { name: "Innovation Sky", swatch: "linear-gradient(135deg, #0284c7 0%, #7dd3fc 100%)" },
 ];
 
 const INITIAL_THEME = themes[0]?.name ?? DEFAULT_THEME;
@@ -238,7 +243,8 @@ export default function EditorPage({ params }: { params: { id: string } }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const presentationId = searchParams.get("presentationId");
-  const [isDark, setIsDark] = useState(false);
+  const { theme, toggleTheme, mounted } = useTheme();
+  const isDark = mounted && theme === "dark";
   const [presentationTitle, setPresentationTitle] = useState(() => formatTitleFromId(params.id));
   const [slides, setSlides] = useState<SlideData[]>(initialSlides);
   const [selectedSlideId, setSelectedSlideId] = useState(initialSlides[0].id);
@@ -299,6 +305,7 @@ export default function EditorPage({ params }: { params: { id: string } }) {
     [selectedSlideId, slides]
   );
   const selectedThemeName = selectedSlide?.theme ?? themes[0]?.name ?? DEFAULT_THEME;
+  const activeTheme = getThemeByName(selectedThemeName) || presentationThemes["aramco-classic"];
   const currentSlideIndex = slides.findIndex((slide) => slide.id === selectedSlideId);
   const isFirstSlide = currentSlideIndex <= 0;
   const isLastSlide = currentSlideIndex === slides.length - 1;
@@ -430,9 +437,11 @@ export default function EditorPage({ params }: { params: { id: string } }) {
               id: docSnap.id,
               order: typeof data.order === "number" ? data.order : index + 1,
               title: data.title || placeholderMap.title,
-              subtitle: finalContent || placeholderMap.subtitle,
+              subtitle: typeof data.subtitle === "string" ? decryptText(data.subtitle) || data.subtitle : (finalContent || placeholderMap.subtitle),
+              content: typeof data.content === "string" && data.content.length > 0 ? (decryptText(data.content) || data.content) : undefined,
               notes: finalNotes,
               theme: data.theme || themes[0]?.name || DEFAULT_THEME,
+              templateId: typeof data.templateId === "string" ? data.templateId : undefined,
               formatting: ensureFormatting(data.formatting),
             };
           })
@@ -487,26 +496,7 @@ export default function EditorPage({ params }: { params: { id: string } }) {
   [presentationId, hasLoadedFromFirestore, searchParams, router]
 );
 
-  useEffect(() => {
-    const saved = typeof window !== "undefined" ? localStorage.getItem("theme") : null;
-    const prefersDark =
-      typeof window !== "undefined" &&
-      window.matchMedia &&
-      window.matchMedia("(prefers-color-scheme: dark)").matches;
-    const shouldDark = saved ? saved === "dark" : prefersDark;
-    setIsDark(shouldDark);
-    if (shouldDark) document.documentElement.classList.add("dark");
-  }, []);
-
-  useEffect(() => {
-    if (isDark) {
-      document.documentElement.classList.add("dark");
-      localStorage.setItem("theme", "dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-      localStorage.setItem("theme", "light");
-    }
-  }, [isDark]);
+  // Theme is managed by useTheme hook - no need for separate useEffect
 
   // Load from Firestore if presentationId is available
   useEffect(() => {
@@ -714,21 +704,41 @@ export default function EditorPage({ params }: { params: { id: string } }) {
     return () => document.removeEventListener("mousedown", handleClickAway);
   }, [isThemePickerOpen]);
 
+  // Update content when slide changes, but don't interfere while user is typing
+  const prevSlideIdRef = useRef<string | undefined>(selectedSlide?.id);
   useEffect(() => {
     if (!selectedSlide) return;
     const formatting = selectedSlide.formatting ?? DEFAULT_FORMATTING;
-    if (titleRef.current) {
-      titleRef.current.innerHTML = selectedSlide.title || placeholderMap.title;
+    const slideChanged = prevSlideIdRef.current !== selectedSlide.id;
+    prevSlideIdRef.current = selectedSlide.id;
+    
+    // When slide changes, always update content
+    // When same slide, only update if field is NOT focused (user is not typing)
+    const shouldUpdateTitle = slideChanged || document.activeElement !== titleRef.current;
+    const shouldUpdateSubtitle = slideChanged || document.activeElement !== subtitleRef.current;
+    
+    if (titleRef.current && shouldUpdateTitle) {
+      const currentContent = titleRef.current.innerHTML.trim();
+      const newContent = selectedSlide.title || placeholderMap.title;
+      // Only update if content actually changed
+      if (currentContent !== newContent) {
+        titleRef.current.innerHTML = newContent;
+      }
       titleRef.current.style.lineHeight = `${formatting.title.lineHeight}`;
     }
-    if (subtitleRef.current) {
-      subtitleRef.current.innerHTML = selectedSlide.subtitle || placeholderMap.subtitle;
+    if (subtitleRef.current && shouldUpdateSubtitle) {
+      const currentContent = subtitleRef.current.innerHTML.trim();
+      const newContent = selectedSlide.subtitle || placeholderMap.subtitle;
+      // Only update if content actually changed
+      if (currentContent !== newContent) {
+        subtitleRef.current.innerHTML = newContent;
+      }
       subtitleRef.current.style.lineHeight = `${formatting.subtitle.lineHeight}`;
     }
     if (notesRef.current) {
       notesRef.current.style.lineHeight = `${formatting.notes.lineHeight}`;
     }
-  }, [selectedSlide]);
+  }, [selectedSlide?.id, selectedSlide?.title, selectedSlide?.subtitle]); // Update when slide or content changes
 
   useEffect(() => {
     const handleSelectionChange = () => {
@@ -923,18 +933,21 @@ export default function EditorPage({ params }: { params: { id: string } }) {
 
   const handleThemeSelect = useCallback(
     (themeName: string) => {
+      // Apply theme to all slides in the deck
       setSlides((prev) =>
-        prev.map((slide) =>
-          slide.id === selectedSlideId
-            ? {
+        prev.map((slide) => ({
                 ...slide,
                 theme: themeName,
-              }
-            : slide
-        )
+        }))
       );
+      
+      // Also update the presentation document if we have a presentationId
+      if (presentationId) {
+        const presentationRef = doc(db, "presentations", presentationId);
+        setDoc(presentationRef, { theme: themeName, themeId: getThemeByName(themeName)?.id || "aramco-classic" }, { merge: true }).catch(console.error);
+      }
     },
-    [selectedSlideId]
+    [presentationId]
   );
 
   useEffect(() => {
@@ -1024,7 +1037,7 @@ export default function EditorPage({ params }: { params: { id: string } }) {
   };
 
   const handleAddSlide = async () => {
-    const themeName = selectedThemeName || themes[0]?.name || DEFAULT_THEME;
+      const themeName = selectedThemeName || themes[0]?.name || DEFAULT_THEME;
 
     if (!presentationId) {
       setSlides((prev) => {
@@ -1034,18 +1047,18 @@ export default function EditorPage({ params }: { params: { id: string } }) {
             : 1;
         const newSlideId = `slide-${Date.now()}`;
         const defaultFormatting = createDefaultFormatting();
-        const newSlide: SlideData = {
+      const newSlide: SlideData = {
           id: newSlideId,
           order: nextOrder,
-          title: placeholderMap.title,
-          subtitle: placeholderMap.subtitle,
-          notes: "",
-          theme: themeName,
+        title: placeholderMap.title,
+        subtitle: placeholderMap.subtitle,
+        notes: "",
+        theme: themeName,
           formatting: defaultFormatting,
-        };
+      };
         setSelectedSlideId(newSlideId);
-        return [...prev, newSlide];
-      });
+      return [...prev, newSlide];
+    });
       return;
     }
 
@@ -1119,12 +1132,16 @@ export default function EditorPage({ params }: { params: { id: string } }) {
     return () => window.clearTimeout(timeoutId);
   }, [statusMessage]);
 
-  const handleSaveSlide = async () => {
+  const handleSaveSlide = async (isShared?: boolean) => {
+    // Ensure isShared is a boolean (default to false)
+    const shouldShare = isShared === true;
     syncActiveFieldContent("title");
     syncActiveFieldContent("subtitle");
     if (notesRef.current) {
       updateSlideField("notes", notesRef.current.value);
     }
+    
+    const currentUser = auth.currentUser;
     
     if (!presentationId) {
       // Fallback to localStorage if no presentationId
@@ -1141,15 +1158,23 @@ export default function EditorPage({ params }: { params: { id: string } }) {
     try {
       // Save presentation document
       const presentationRef = doc(db, "presentations", presentationId);
-      await setDoc(
-        presentationRef,
-        {
-          title: presentationTitle,
-          status: status,
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true }
-      );
+      const presentationData: any = {
+        title: presentationTitle,
+        status: status,
+        updatedAt: serverTimestamp(),
+      };
+
+      // Only set ownerId and isShared flag when sharing (for team dashboard)
+      if (shouldShare && currentUser) {
+        presentationData.ownerId = currentUser.uid;
+        presentationData.isShared = true; // Mark as shared for team dashboard
+      } else if (currentUser) {
+        // For private saves, ensure ownerId is set but mark as private
+        presentationData.ownerId = currentUser.uid;
+        presentationData.isShared = false; // Mark as private
+      }
+
+      await setDoc(presentationRef, presentationData, { merge: true });
 
       // Save all slides
       for (const slide of slides) {
@@ -1176,7 +1201,7 @@ export default function EditorPage({ params }: { params: { id: string } }) {
         );
       }
 
-      // Also update localStorage meta for backward compatibility
+      // Update localStorage meta for recent presentations (always, for both save and share)
       const slideSummary = slides.map((slide) => ({
         id: slide.id,
         title: typeof slide.title === "string" ? slide.title : "",
@@ -1185,19 +1210,45 @@ export default function EditorPage({ params }: { params: { id: string } }) {
       }));
       markPresentationSaved(presentationId, presentationTitle, slideSummary, status);
 
-      const currentUser = auth.currentUser;
-      await logAuditEvent({
-        presentationId,
-        userId: currentUser?.uid ?? null,
-        userEmail: currentUser?.email ?? null,
-        action: "UPDATE_SLIDE_SET",
-        details: {
-          slideIds: slideSummary.map((slide) => slide.id),
-          count: slideSummary.length,
-        },
-      });
+      if (currentUser) {
+        await logAuditEvent({
+          presentationId,
+          userId: currentUser.uid,
+          userEmail: currentUser.email,
+          action: shouldShare ? "SHARE_PRESENTATION" : "UPDATE_SLIDE_SET",
+          details: {
+            slideIds: slideSummary.map((slide) => slide.id),
+            count: slideSummary.length,
+            isShared: shouldShare,
+          },
+        });
+      }
     } catch (error) {
       console.error("Failed to save to Firestore:", error);
+    }
+  };
+
+  const handleShare = async () => {
+    if (!presentationId) {
+      console.error("Cannot share: no presentation ID");
+      return;
+    }
+
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      console.error("Cannot share: user not authenticated");
+      return;
+    }
+
+    try {
+      // Save with isShared=true to make it appear in team dashboard
+      await handleSaveSlide(true);
+
+      // Redirect to dashboard to see the shared presentation
+      window.location.href = "http://localhost:3006/dashboard";
+    } catch (error) {
+      console.error("Failed to share presentation:", error);
+      alert("Failed to share presentation. Please try again.");
     }
   };
 
@@ -1241,19 +1292,19 @@ export default function EditorPage({ params }: { params: { id: string } }) {
     }
 
     if (!presentationId) {
-      setSlides((prev) => {
-        const index = prev.findIndex((slide) => slide.id === selectedSlideId);
-        if (index === -1) {
-          return prev;
-        }
-        const nextSlides = prev.filter((slide) => slide.id !== selectedSlideId);
-        const nextIndex = Math.max(0, Math.min(index, nextSlides.length - 1));
-        const nextSlide = nextSlides[nextIndex];
-        if (nextSlide) {
-          setSelectedSlideId(nextSlide.id);
-        }
-        return nextSlides;
-      });
+    setSlides((prev) => {
+      const index = prev.findIndex((slide) => slide.id === selectedSlideId);
+      if (index === -1) {
+        return prev;
+      }
+      const nextSlides = prev.filter((slide) => slide.id !== selectedSlideId);
+      const nextIndex = Math.max(0, Math.min(index, nextSlides.length - 1));
+      const nextSlide = nextSlides[nextIndex];
+      if (nextSlide) {
+        setSelectedSlideId(nextSlide.id);
+      }
+      return nextSlides;
+    });
       return;
     }
 
@@ -1330,17 +1381,17 @@ export default function EditorPage({ params }: { params: { id: string } }) {
     if (!trimmed) return;
 
     if (!presentationId) {
-      const now = new Date();
-      setComments((prev) => [
-        {
-          id: `comment-${Date.now()}`,
-          author: "You",
-          message: trimmed,
-          timestamp: now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        },
-        ...prev,
-      ]);
-      setNewComment("");
+    const now = new Date();
+    setComments((prev) => [
+      {
+        id: `comment-${Date.now()}`,
+        author: "You",
+        message: trimmed,
+        timestamp: now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      },
+      ...prev,
+    ]);
+    setNewComment("");
       return;
     }
 
@@ -1700,10 +1751,40 @@ export default function EditorPage({ params }: { params: { id: string } }) {
 
   const currentFormatting = selectedSlide ? ensureFormatting(selectedSlide.formatting) : DEFAULT_FORMATTING;
 
-  const getTextStyle = (field: FieldKey): CSSProperties => ({
+  const isAITemplate = selectedSlide?.templateId === "ai-modern";
+  const aiStyles = isAITemplate ? getAITemplateStyles() : null;
+
+  const getTextStyle = (field: FieldKey): CSSProperties => {
+    const baseStyle: CSSProperties = {
     lineHeight: `${currentFormatting[field]?.lineHeight ?? DEFAULT_FORMATTING[field].lineHeight}`,
     whiteSpace: "pre-wrap",
-  });
+    };
+
+    // Apply theme styles
+    if (field === "title") {
+      return {
+        ...baseStyle,
+        fontSize: activeTheme.titleFontSize,
+        fontWeight: activeTheme.titleFontWeight,
+        color: activeTheme.titleColor,
+        lineHeight: activeTheme.titleLineHeight,
+        textAlign: "center" as const,
+        marginBottom: "clamp(16px, 2vw, 24px)",
+      };
+    } else if (field === "subtitle") {
+      return {
+        ...baseStyle,
+        fontSize: activeTheme.bulletFontSize,
+        fontWeight: activeTheme.bulletFontWeight,
+        color: activeTheme.bulletColor,
+        lineHeight: activeTheme.bulletLineHeight,
+        textAlign: "center" as const,
+        marginBottom: "clamp(24px, 3vw, 40px)",
+      };
+    }
+
+    return baseStyle;
+  };
 
   const handleOpenSlideshow = () => {
     const fallbackId = slides[0]?.id ?? "";
@@ -1789,10 +1870,27 @@ export default function EditorPage({ params }: { params: { id: string } }) {
           <button
             type="button"
             aria-label="Toggle dark mode"
-            onClick={() => setIsDark((value) => !value)}
+            onClick={toggleTheme}
             className={styles.themeToggle}
           >
-            {isDark ? (
+            {!mounted ? (
+              // Render moon icon during SSR to avoid hydration mismatch
+              <svg
+                className={`${styles.icon} ${styles.iconSpin}`}
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  fill="none"
+                />
+              </svg>
+            ) : isDark ? (
               <svg
                 className={`${styles.icon} ${styles.iconSpin}`}
                 width="20"
@@ -1829,7 +1927,7 @@ export default function EditorPage({ params }: { params: { id: string } }) {
           </button>
           {!loading && !user ? (
             <button className={styles.primary} type="button" onClick={() => router.push("/login")}>
-              Sign in
+            Sign in
             </button>
           ) : null}
           {!loading && user ? (
@@ -1900,8 +1998,17 @@ export default function EditorPage({ params }: { params: { id: string } }) {
                     <div className={styles.titleLine}>
                       <input
                         className={styles.titleInput}
+                        type="text"
                         value={presentationTitle}
                         onChange={(event) => setPresentationTitle(event.target.value)}
+                        onBlur={() => {
+                          // Auto-save title when user finishes editing
+                          if (presentationId) {
+                            const presentationRef = doc(db, "presentations", presentationId);
+                            setDoc(presentationRef, { title: presentationTitle, updatedAt: serverTimestamp() }, { merge: true }).catch(console.error);
+                          }
+                        }}
+                        placeholder="Enter presentation title"
                         aria-label="Presentation title"
                         disabled={isReadOnly}
                       />
@@ -1928,7 +2035,7 @@ export default function EditorPage({ params }: { params: { id: string } }) {
                           disabled={status === "final"}
                         >
                           Mark as Final
-                        </button>
+                      </button>
                       </div>
                     </div>
                     <span className={styles.productName}>Secure Presentation Tool</span>
@@ -1970,28 +2077,16 @@ export default function EditorPage({ params }: { params: { id: string } }) {
                       Manage Team
                     </button>
                   ) : null}
-                  <button type="button" className={styles.shareButton}>
+                  <button 
+                    type="button" 
+                    className={styles.shareButton}
+                    onClick={handleShare}
+                  >
                     Share
                   </button>
                   <button type="button" className={styles.slideshowButton} onClick={handleOpenSlideshow}>
                     Slideshow
                   </button>
-                  {presentationId ? (
-                    <button
-                      type="button"
-                      className={styles.slideshowButton}
-                      onClick={() =>
-                        router.push(
-                          `/present?presentationId=${encodeURIComponent(presentationId)}&slideIndex=${Math.max(
-                            slides.findIndex((slide) => slide.id === selectedSlideId),
-                            0
-                          )}`
-                        )
-                      }
-                    >
-                      Present
-                    </button>
-                  ) : null}
                 </div>
               </div>
             </header>
@@ -2076,44 +2171,316 @@ export default function EditorPage({ params }: { params: { id: string } }) {
 
                 <section className={styles.canvasRegion}>
                   <div className={styles.canvasShell}>
-                    <div className={styles.canvasSurface}>
-                    <div
-                      ref={titleRef}
-                      className={styles.slideTitleInput}
-                      contentEditable={!isReadOnly}
-                      suppressContentEditableWarning
-                      role="textbox"
-                      aria-label="Slide title"
-                      onInput={() => handleContentInput("title")}
-                      onFocus={() => handleContentFocus("title")}
-                      onBlur={() => handleContentBlur("title")}
-                      style={getTextStyle("title")}
-                      data-readonly={isReadOnly}
-                    />
-                    <div
-                      ref={subtitleRef}
-                      className={styles.slideSubtitleInput}
-                      contentEditable={!isReadOnly}
-                      suppressContentEditableWarning
-                      role="textbox"
-                      aria-label="Slide subtitle"
-                      onInput={() => handleContentInput("subtitle")}
-                      onFocus={() => handleContentFocus("subtitle")}
-                      onBlur={() => handleContentBlur("subtitle")}
-                      style={getTextStyle("subtitle")}
-                      data-readonly={isReadOnly}
-                    />
+                    <div 
+                      className={styles.canvasSurface}
+                      style={{
+                        background: activeTheme.slideBackground,
+                        border: activeTheme.canvasBorder,
+                        boxShadow: activeTheme.canvasShadow,
+                        position: "relative",
+                        overflow: "hidden",
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        justifyContent: "flex-start",
+                        padding: "clamp(48px, 5vw, 72px)",
+                        gap: "clamp(16px, 2vw, 24px)",
+                      }}
+                    >
+                      <div
+                        ref={titleRef}
+                        className={styles.slideTitleInput}
+                        contentEditable={!isReadOnly}
+                        suppressContentEditableWarning
+                        role="textbox"
+                        aria-label="Slide title"
+                        onInput={(e) => {
+                          e.preventDefault();
+                          handleContentInput("title");
+                        }}
+                        onFocus={() => handleContentFocus("title")}
+                        onBlur={() => handleContentBlur("title")}
+                        style={{
+                          ...getTextStyle("title"),
+                          width: "100%",
+                          textAlign: "center",
+                        }}
+                        data-readonly={isReadOnly}
+                      />
+                    {/* For AI template: Show subtitle only for title slide, content for other slides */}
+                    {isAITemplate ? (
+                      <>
+                        {/* Title slide: show subtitle */}
+                        {selectedSlide?.subtitle && (
+                          <div
+                            ref={subtitleRef}
+                            className={styles.slideSubtitleInput}
+                            contentEditable={!isReadOnly}
+                            suppressContentEditableWarning
+                            role="textbox"
+                            aria-label="Slide subtitle"
+                            onInput={(e) => {
+                              e.preventDefault();
+                              handleContentInput("subtitle");
+                            }}
+                            onFocus={() => handleContentFocus("subtitle")}
+                            onBlur={() => handleContentBlur("subtitle")}
+                            style={{
+                              ...getTextStyle("subtitle"),
+                              width: "100%",
+                              textAlign: "center",
+                            }}
+                            data-readonly={isReadOnly}
+                          />
+                        )}
+                        {/* Outline slide: show numbered sections */}
+                        {selectedSlide?.title === "Outline" && selectedSlide?.content && (
+                          <div
+                            className={styles.slideContent}
+                            style={{
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "clamp(16px, 2vw, 24px)",
+                              marginTop: "auto",
+                              width: "100%",
+                              maxWidth: "75%",
+                              alignItems: "flex-start",
+                            }}
+                          >
+                            {(() => {
+                              // Parse numbered sections (e.g., "1. Overview", "2. Key Concepts")
+                              const lines = selectedSlide.content
+                                .split('\n')
+                                .map(line => line.trim())
+                                .filter(line => line.length > 0);
+                              
+                              return lines.map((line, index) => {
+                                // Check if line starts with a number (e.g., "1. ", "2. ")
+                                const numberedMatch = line.match(/^(\d+)\.\s*(.+)$/);
+                                
+                                if (numberedMatch) {
+                                  const [, number, text] = numberedMatch;
+                                  return (
+                                    <div
+                                      key={`outline-${index}`}
+                                      style={{
+                                        display: "flex",
+                                        alignItems: "flex-start",
+                                        marginBottom: index < lines.length - 1 ? "clamp(16px, 2vw, 24px)" : "0",
+                                        lineHeight: activeTheme.bulletLineHeight,
+                                        minHeight: "1.5em",
+                                        width: "100%",
+                                      }}
+                                    >
+                                      <span 
+                                        style={{ 
+                                          marginRight: "1rem", 
+                                          color: activeTheme.titleColor,
+                                          fontSize: activeTheme.bulletFontSize,
+                                          fontWeight: 600,
+                                          lineHeight: activeTheme.bulletLineHeight,
+                                          flexShrink: 0,
+                                          minWidth: "2rem",
+                                        }}
+                                      >
+                                        {number}.
+                                      </span>
+                                      <span 
+                                        style={{ 
+                                          flex: 1, 
+                                          wordBreak: "break-word",
+                                          fontSize: activeTheme.bulletFontSize,
+                                          fontWeight: activeTheme.bulletFontWeight,
+                                          color: activeTheme.bulletColor,
+                                          lineHeight: activeTheme.bulletLineHeight,
+                                        }}
+                                      >
+                                        {text}
+                                      </span>
+                                    </div>
+                                  );
+                                }
+                                
+                                // Fallback: render as regular line
+                                return (
+                                  <div
+                                    key={`line-${index}`}
+                                    style={{
+                                      marginBottom: index < lines.length - 1 ? "clamp(16px, 2vw, 24px)" : "0",
+                                      lineHeight: activeTheme.bulletLineHeight,
+                                      wordBreak: "break-word",
+                                      minHeight: "1.5em",
+                                      width: "100%",
+                                      fontSize: activeTheme.bulletFontSize,
+                                      fontWeight: activeTheme.bulletFontWeight,
+                                      color: activeTheme.bulletColor,
+                                    }}
+                                  >
+                                    {line}
+                                  </div>
+                                );
+                              });
+                            })()}
+                          </div>
+                        )}
+                        {/* Content slides: show content (only if no subtitle and not outline slide) */}
+                        {selectedSlide?.content && !selectedSlide?.subtitle && selectedSlide?.title !== "Outline" && (
+                          <div
+                            className={styles.slideContent}
+                            style={{
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "clamp(12px, 1.5vw, 20px)",
+                              marginTop: selectedSlide?.subtitle ? "0" : "auto",
+                              width: "100%",
+                              maxWidth: "85%",
+                              alignItems: "flex-start",
+                            }}
+                          >
+                            {(() => {
+                              // Clean and deduplicate content
+                              const lines = selectedSlide.content
+                                .split('\n')
+                                .map(line => line.trim())
+                                .filter(line => line.length > 0);
+                              
+                              // Remove duplicates
+                              const uniqueLines = Array.from(new Set(lines));
+                              
+                              return uniqueLines.map((line, index) => {
+                                // Convert bullet points
+                                if (line.startsWith('•') || line.startsWith('-')) {
+                                  const text = line.substring(1).trim();
+                                  if (!text) return null;
+                                  
+                                  return (
+                                    <div
+                                      key={`bullet-${index}`}
+                                      style={{
+                                        display: "flex",
+                                        alignItems: "flex-start",
+                                        marginBottom: index < uniqueLines.length - 1 ? "clamp(12px, 1.5vw, 20px)" : "0",
+                                        lineHeight: activeTheme.bulletLineHeight,
+                                        minHeight: "1.5em",
+                                        width: "100%",
+                                      }}
+                                    >
+                                      <span 
+                                        style={{ 
+                                          marginRight: "0.75rem", 
+                                          color: activeTheme.titleColor,
+                                          fontSize: "1.5em",
+                                          lineHeight: "1",
+                                          marginTop: "0.1em",
+                                          flexShrink: 0,
+                                          fontWeight: "bold",
+                                        }}
+                                      >
+                                        •
+                                      </span>
+                                      <span 
+                                        style={{ 
+                                          flex: 1, 
+                                          wordBreak: "break-word",
+                                          fontSize: activeTheme.bulletFontSize,
+                                          fontWeight: activeTheme.bulletFontWeight,
+                                          color: activeTheme.bulletColor,
+                                          lineHeight: activeTheme.bulletLineHeight,
+                                        }}
+                                      >
+                                        {text}
+                                      </span>
+                                    </div>
+                                  );
+                                }
+                                
+                                return (
+                                  <div
+                                    key={`line-${index}`}
+                                    style={{
+                                      marginBottom: index < uniqueLines.length - 1 ? "clamp(12px, 1.5vw, 20px)" : "0",
+                                      lineHeight: activeTheme.bulletLineHeight,
+                                      wordBreak: "break-word",
+                                      minHeight: "1.5em",
+                                      width: "100%",
+                                      fontSize: activeTheme.bulletFontSize,
+                                      fontWeight: activeTheme.bulletFontWeight,
+                                      color: activeTheme.bulletColor,
+                                    }}
+                                  >
+                                    {line}
+                                  </div>
+                                );
+                              }).filter(Boolean);
+                            })()}
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      /* Non-AI template: show subtitle normally */
+                      selectedSlide?.subtitle && (
+                        <div
+                          ref={subtitleRef}
+                          className={styles.slideSubtitleInput}
+                          contentEditable={!isReadOnly}
+                          suppressContentEditableWarning
+                          role="textbox"
+                          aria-label="Slide subtitle"
+                          onInput={(e) => {
+                            e.preventDefault();
+                            handleContentInput("subtitle");
+                          }}
+                          onFocus={() => handleContentFocus("subtitle")}
+                          onBlur={() => handleContentBlur("subtitle")}
+                          style={getTextStyle("subtitle")}
+                          data-readonly={isReadOnly}
+                        />
+                      )
+                    )}
                     </div>
                     <div className={styles.canvasActionBar}>
-                      <button type="button" onClick={handleSaveSlide} className={`${styles.canvasActionButton} ${styles.canvasActionPrimary}`}>
+                      <button 
+                        type="button" 
+                        onClick={() => handleSaveSlide(false)} 
+                        className={`${styles.canvasActionButton} ${styles.canvasActionPrimary}`}
+                        style={{
+                          backgroundColor: activeTheme.buttonPrimaryBg,
+                          color: activeTheme.buttonPrimaryColor,
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = activeTheme.buttonPrimaryHover;
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = activeTheme.buttonPrimaryBg;
+                        }}
+                      >
                         Save
                       </button>
-                      <button type="button" className={`${styles.canvasActionButton} ${styles.canvasActionSecondary}`}>
+                      <button 
+                        type="button" 
+                        onClick={handleShare}
+                        className={`${styles.canvasActionButton} ${styles.canvasActionSecondary}`}
+                        style={{
+                          backgroundColor: activeTheme.buttonSecondaryBg,
+                          color: activeTheme.buttonSecondaryColor,
+                          borderColor: activeTheme.buttonSecondaryBorder,
+                        }}
+                      >
                         Share
                       </button>
                       <button
                         type="button"
                         onClick={handleOpenSlideshow}
+                        style={{
+                          backgroundColor: activeTheme.buttonPrimaryBg,
+                          color: activeTheme.buttonPrimaryColor,
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = activeTheme.buttonPrimaryHover;
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = activeTheme.buttonPrimaryBg;
+                        }}
                         className={`${styles.canvasActionButton} ${styles.canvasActionSecondary}`}
                       >
                         Slideshow

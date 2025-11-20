@@ -32,30 +32,8 @@ const templates: TemplateCard[] = [
   { id: "lookbook", title: "Lookbook", accent: "var(--accent-green)" },
 ];
 
-const recents: RecentPresentation[] = [
-  {
-    id: "deep-learning",
-    title: "Lab Manual: Introduction to Deep Learning",
-    date: "18 Jun 2025",
-    thumbAccent: "linear-gradient(135deg, #79c7d9, #e1f3fb)",
-    type: "P",
-  },
-  {
-    id: "dbms",
-    title: "Advanced Coding & Databases for AI & Data Science",
-    date: "15 Dec 2024",
-    thumbAccent: "linear-gradient(135deg, #76d6b4, #e9f7f0)",
-    shared: true,
-    type: "G",
-  },
-  {
-    id: "ai-marketing",
-    title: "AI in Marketing Presentation",
-    date: "Opened 4 Oct 2024",
-    thumbAccent: "linear-gradient(135deg, #7f96ff, #e2e7ff)",
-    type: "P",
-  },
-];
+// Recent presentations will be loaded from Firestore/localStorage dynamically
+const recents: RecentPresentation[] = [];
 
 export default function SlidesHome() {
   const { theme, toggleTheme } = useTheme();
@@ -177,7 +155,12 @@ export default function SlidesHome() {
             </div>
 
             <div className={styles.recentGrid}>
-              {recents.map((item) => (
+              {recents.length === 0 ? (
+                <div style={{ padding: "40px 20px", textAlign: "center", color: "#5f6368", gridColumn: "1 / -1" }}>
+                  No recent presentations. Create a presentation to see it here.
+                </div>
+              ) : (
+                recents.map((item) => (
                 <article key={item.id} className={styles.recentCard}>
                   <div className={styles.recentThumb} style={{ background: item.thumbAccent }}>
                     <span className={styles.fileBadge}>{item.type ?? "P"}</span>
@@ -189,7 +172,8 @@ export default function SlidesHome() {
                   </div>
                   <button className={styles.cardMenu} type="button" aria-label="More actions">⋮</button>
                 </article>
-              ))}
+                ))
+              )}
             </div>
           </section>
         </main>

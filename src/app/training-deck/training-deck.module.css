@@ -380,77 +380,127 @@
   }
 }
 
-@media (prefers-color-scheme: dark) {
-  .nav {
-    background: rgba(10, 19, 28, 0.92);
-    border-bottom-color: rgba(148, 163, 184, 0.2);
-  }
+:global(.dark) .nav {
+  background: rgba(10, 19, 28, 0.92);
+  border-bottom-color: rgba(148, 163, 184, 0.2);
+}
 
-  .navLink {
-    color: rgba(226, 232, 240, 0.72);
-  }
+:global(.dark) .navLink {
+  color: rgba(226, 232, 240, 0.72);
+}
 
-  .navLink:hover {
-    color: rgba(226, 232, 240, 0.92);
-  }
+:global(.dark) .navLink:hover {
+  color: rgba(226, 232, 240, 0.92);
+}
 
-  .navLinkActive {
-    color: #67e8f9;
-  }
+:global(.dark) .navLinkActive {
+  color: #67e8f9;
+}
 
-  .navLinkActive::after {
-    background: linear-gradient(135deg, #67e8f9, #3cc8b6);
-  }
+:global(.dark) .navLinkActive::after {
+  background: linear-gradient(135deg, #67e8f9, #3cc8b6);
+}
 
-  .themeToggle {
-    background: rgba(10, 19, 28, 0.92);
-    border-color: rgba(94, 234, 212, 0.4);
-    color: #e2e8f0;
-  }
+:global(.dark) .themeToggle {
+  background: rgba(10, 19, 28, 0.92);
+  border-color: rgba(94, 234, 212, 0.4);
+  color: #e2e8f0;
+}
 
-  .main {
-    background: linear-gradient(180deg, #0b1721 0%, #07121a 100%);
-  }
+:global(.dark) .primary,
+:global(.dark) .primaryButton {
+  background: #56c1b0;
+  color: #06151b;
+}
 
-  .main::before {
-    opacity: 0.35;
-  }
+:global(.dark) .primary:hover,
+:global(.dark) .primaryButton:hover {
+  background: #4bb29f;
+}
 
-  .container,
-  .title,
-  .subtitle,
-  .canvasNotes,
-  .canvasNotes p,
-  .canvasNotes h4 {
-    color: #e2f6f2;
-  }
+:global(.dark) .secondary {
+  color: #67e8f9;
+  border-color: #67e8f9;
+}
 
-  .sidebar,
-  .canvasCard,
-  .canvasNotes {
-    background: rgba(10, 19, 28, 0.94);
-    border-color: rgba(94, 234, 212, 0.18);
-    box-shadow: 0 30px 60px rgba(0, 0, 0, 0.55);
-  }
+:global(.dark) .secondary:hover {
+  background: rgba(56, 189, 248, 0.15);
+}
 
-  .slideListItem {
-    background: rgba(94, 234, 212, 0.12);
-    color: #e2f6f2;
-  }
+:global(.dark) .ghostButton {
+  background: rgba(94, 234, 212, 0.15);
+  color: #e2f6f2;
+}
 
-  .slideListItem:hover {
-    background: rgba(94, 234, 212, 0.2);
-  }
+:global(.dark) .ghostButton:hover {
+  background: rgba(94, 234, 212, 0.25);
+}
 
-  .slideListItemActive {
-    background: linear-gradient(135deg, rgba(94, 234, 212, 0.85), rgba(45, 131, 118, 0.85));
-  }
+:global(.dark) .outlineButton {
+  color: #67e8f9;
+  border-color: rgba(94, 234, 212, 0.5);
+}
 
-  .canvasSubtitle {
-    color: rgba(226, 232, 240, 0.8);
-  }
+:global(.dark) .outlineButton:hover {
+  border-color: rgba(94, 234, 212, 0.7);
+  background: rgba(56, 189, 248, 0.1);
+}
 
-  .footer {
-    color: rgba(226, 232, 240, 0.7);
-  }
+:global(.dark) .main {
+  background: linear-gradient(180deg, #0b1721 0%, #07121a 100%);
+}
+
+:global(.dark) .main::before {
+  opacity: 0.35;
+  background:
+    radial-gradient(120% 60% at 110% 20%, rgba(56, 189, 184, 0.24) 0%, rgba(56, 189, 184, 0) 70%),
+    radial-gradient(90% 45% at -10% 10%, rgba(22, 163, 190, 0.24) 0%, rgba(22, 163, 190, 0) 80%),
+    radial-gradient(70% 35% at 50% 95%, rgba(14, 165, 233, 0.18) 0%, rgba(14, 165, 233, 0) 70%);
+}
+
+:global(.dark) .container,
+:global(.dark) .title,
+:global(.dark) .subtitle,
+:global(.dark) .canvasNotes,
+:global(.dark) .canvasNotes p,
+:global(.dark) .canvasNotes h4 {
+  color: #e2f6f2;
+}
+
+:global(.dark) .sidebar,
+:global(.dark) .canvasCard,
+:global(.dark) .canvasNotes {
+  background: rgba(10, 19, 28, 0.94);
+  border-color: rgba(94, 234, 212, 0.18);
+  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.55);
+}
+
+:global(.dark) .sidebarHeading {
+  color: #e2f6f2;
+}
+
+:global(.dark) .slideListItem {
+  background: rgba(94, 234, 212, 0.12);
+  color: #e2f6f2;
+}
+
+:global(.dark) .slideListItem:hover {
+  background: rgba(94, 234, 212, 0.2);
+}
+
+:global(.dark) .slideListItemActive {
+  background: linear-gradient(135deg, rgba(94, 234, 212, 0.85), rgba(45, 131, 118, 0.85));
+  color: #06151b;
+}
+
+:global(.dark) .canvasTitle {
+  color: #e2f6f2;
+}
+
+:global(.dark) .canvasSubtitle {
+  color: rgba(226, 232, 240, 0.8);
+}
+
+:global(.dark) .footer {
+  color: rgba(226, 232, 240, 0.7);
 }

@@ -13,36 +13,8 @@ export type PresentationRecord = {
   slides: SlideSummary[];
 };
 
-let mockPresentations: PresentationRecord[] = [
-  {
-    presentationId: "presentation-deep-learning",
-    title: "Lab Manual: Introduction to Deep Learning",
-    owner: "Aramco Digital",
-    lastUpdated: "2025-06-18T09:00:00.000Z",
-    status: "Draft",
-    slides: [
-      {
-        id: "slide-1",
-        title: "Overview",
-        subtitle: "What we will cover today",
-      },
-    ],
-  },
-  {
-    presentationId: "presentation-dbms",
-    title: "Advanced Coding & Databases for AI & Data Science",
-    owner: "Shared Workspace",
-    lastUpdated: "2024-12-15T11:00:00.000Z",
-    status: "Final",
-    slides: [
-      {
-        id: "slide-1",
-        title: "Recap",
-        subtitle: "Where we left off",
-      },
-    ],
-  },
-];
+// All dummy data removed - this file should use Firestore instead
+let mockPresentations: PresentationRecord[] = [];
 
 const simulateDelay = (ms = 400) => new Promise((resolve) => setTimeout(resolve, ms));
 
