@@ -1,10 +1,4 @@
 'use client';
 
-type AuthLike = {
-  signOut: () => Promise<void> | void;
-};
-
-export async function signOut(auth: AuthLike) {
-  await auth.signOut();
-}
-
+// Re-export all Firebase Auth functions
+export * from "firebase/auth";

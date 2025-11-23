@@ -380,6 +380,7 @@
   }
 }
 
+/* Dark Mode Styles - Using :global(.dark) to work with theme toggle */
 :global(.dark) .nav {
   background: rgba(10, 19, 28, 0.92);
   border-bottom-color: rgba(148, 163, 184, 0.2);
@@ -405,45 +406,6 @@
   background: rgba(10, 19, 28, 0.92);
   border-color: rgba(94, 234, 212, 0.4);
   color: #e2e8f0;
-}
-
-:global(.dark) .primary,
-:global(.dark) .primaryButton {
-  background: #56c1b0;
-  color: #06151b;
-}
-
-:global(.dark) .primary:hover,
-:global(.dark) .primaryButton:hover {
-  background: #4bb29f;
-}
-
-:global(.dark) .secondary {
-  color: #67e8f9;
-  border-color: #67e8f9;
-}
-
-:global(.dark) .secondary:hover {
-  background: rgba(56, 189, 248, 0.15);
-}
-
-:global(.dark) .ghostButton {
-  background: rgba(94, 234, 212, 0.15);
-  color: #e2f6f2;
-}
-
-:global(.dark) .ghostButton:hover {
-  background: rgba(94, 234, 212, 0.25);
-}
-
-:global(.dark) .outlineButton {
-  color: #67e8f9;
-  border-color: rgba(94, 234, 212, 0.5);
-}
-
-:global(.dark) .outlineButton:hover {
-  border-color: rgba(94, 234, 212, 0.7);
-  background: rgba(56, 189, 248, 0.1);
 }
 
 :global(.dark) .main {
@@ -490,7 +452,7 @@
 
 :global(.dark) .slideListItemActive {
   background: linear-gradient(135deg, rgba(94, 234, 212, 0.85), rgba(45, 131, 118, 0.85));
-  color: #06151b;
+  color: #ffffff;
 }
 
 :global(.dark) .canvasTitle {
@@ -501,6 +463,164 @@
   color: rgba(226, 232, 240, 0.8);
 }
 
+:global(.dark) .ghostButton {
+  background: rgba(94, 234, 212, 0.15);
+  color: #e2f6f2;
+}
+
+:global(.dark) .ghostButton:hover {
+  background: rgba(94, 234, 212, 0.25);
+}
+
+:global(.dark) .outlineButton {
+  color: #67e8f9;
+  border-color: rgba(94, 234, 212, 0.5);
+  background: rgba(10, 19, 28, 0.6);
+}
+
+:global(.dark) .outlineButton:hover {
+  background: rgba(94, 234, 212, 0.15);
+  border-color: rgba(94, 234, 212, 0.7);
+}
+
 :global(.dark) .footer {
   color: rgba(226, 232, 240, 0.7);
+}
+
+/* Explicit light mode overrides - ensure light styles apply when .dark class is removed */
+:global(html:not(.dark)) .nav {
+  background: #ffffff !important;
+  border-bottom-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+:global(html:not(.dark)) .main {
+  background: linear-gradient(180deg, #ffffff 0%, #f5f9fb 55%, #eef3f9 100%) !important;
+}
+
+:global(html:not(.dark)) .sidebar,
+:global(html:not(.dark)) .canvasCard,
+:global(html:not(.dark)) .canvasNotes {
+  background: rgba(255, 255, 255, 0.95) !important;
+  border-color: rgba(86, 193, 176, 0.18) !important;
+  box-shadow: 0 24px 48px rgba(15, 35, 45, 0.12) !important;
+}
+
+:global(html:not(.dark)) .canvasCard {
+  background: rgba(255, 255, 255, 0.96) !important;
+  border-color: rgba(86, 193, 176, 0.15) !important;
+  box-shadow: 0 36px 70px rgba(15, 35, 45, 0.14) !important;
+}
+
+:global(html:not(.dark)) .canvasNotes {
+  background: rgba(255, 255, 255, 0.92) !important;
+  border-color: rgba(86, 193, 176, 0.2) !important;
+  box-shadow: 0 20px 40px rgba(15, 35, 45, 0.12) !important;
+}
+
+:global(html:not(.dark)) .sidebarHeading {
+  color: #0f2f35 !important;
+}
+
+:global(html:not(.dark)) .slideListItem {
+  background: rgba(86, 193, 176, 0.12) !important;
+  color: #1f3c3a !important;
+}
+
+:global(html:not(.dark)) .slideListItem:hover {
+  background: rgba(86, 193, 176, 0.2) !important;
+}
+
+:global(html:not(.dark)) .slideListItemActive {
+  background: linear-gradient(135deg, #56c1b0, #2d8376) !important;
+  color: #ffffff !important;
+}
+
+:global(html:not(.dark)) .canvasTitle {
+  color: #0f2f35 !important;
+}
+
+:global(html:not(.dark)) .canvasSubtitle {
+  color: rgba(22, 48, 57, 0.75) !important;
+}
+
+:global(html:not(.dark)) .container,
+:global(html:not(.dark)) .title,
+:global(html:not(.dark)) .subtitle,
+:global(html:not(.dark)) .canvasNotes,
+:global(html:not(.dark)) .canvasNotes p,
+:global(html:not(.dark)) .canvasNotes h4 {
+  color: inherit !important;
+}
+
+:global(html:not(.dark)) .title {
+  color: #0f2f35 !important;
+}
+
+:global(html:not(.dark)) .subtitle {
+  color: rgba(22, 48, 57, 0.72) !important;
+}
+
+:global(html:not(.dark)) .canvasNotes {
+  color: #163039 !important;
+}
+
+:global(html:not(.dark)) .ghostButton {
+  background: rgba(86, 193, 176, 0.12) !important;
+  color: #1f3c3a !important;
+}
+
+:global(html:not(.dark)) .outlineButton {
+  background: transparent !important;
+  color: #1f3c3a !important;
+  border-color: rgba(86, 193, 176, 0.4) !important;
+}
+
+:global(html:not(.dark)) .footer {
+  color: rgba(22, 48, 57, 0.64) !important;
+}
+
+/* Additional light mode overrides for navigation and other components */
+:global(html:not(.dark)) .navLink {
+  color: #5f6368 !important;
+}
+
+:global(html:not(.dark)) .navLink:hover {
+  color: #202124 !important;
+}
+
+:global(html:not(.dark)) .navLinkActive {
+  color: #0e3731 !important;
+}
+
+:global(html:not(.dark)) .navLinkActive::after {
+  background: linear-gradient(135deg, #56c1b0, #2d8376) !important;
+}
+
+:global(html:not(.dark)) .themeToggle {
+  background: #ffffff !important;
+  color: #333 !important;
+  border-color: rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Ensure main::before gradient is reset for light mode */
+:global(html:not(.dark)) .main::before {
+  opacity: 0.5 !important;
+  background:
+    radial-gradient(120% 60% at 110% 20%, rgba(86, 193, 176, 0.12) 0%, rgba(86, 193, 176, 0) 70%),
+    radial-gradient(90% 45% at -10% 10%, rgba(8, 145, 178, 0.12) 0%, rgba(8, 145, 178, 0) 80%),
+    radial-gradient(70% 35% at 50% 95%, rgba(14, 116, 144, 0.12) 0%, rgba(14, 116, 144, 0) 70%) !important;
+}
+
+/* Ensure header actions buttons have light mode styles */
+:global(html:not(.dark)) .headerActions {
+  color: inherit !important;
+}
+
+/* Ensure all text in canvas notes panel is light mode */
+:global(html:not(.dark)) .canvasNotes h4 {
+  color: #163039 !important;
+}
+
+:global(html:not(.dark)) .canvasNotes p {
+  color: rgba(22, 48, 57, 0.8) !important;
 }

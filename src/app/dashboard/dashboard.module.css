@@ -741,6 +741,7 @@
   }
 }
 
+/* Dark Mode Styles - Using :global(.dark) to work with theme toggle */
 :global(.dark) .nav {
   background: #0f172a;
   border-bottom-color: rgba(255, 255, 255, 0.08);
@@ -754,36 +755,10 @@
   color: #e2e8f0;
 }
 
-:global(.dark) .navLinkActive {
-  color: #67e8f9;
-}
-
-:global(.dark) .navLinkActive::after {
-  background: linear-gradient(135deg, #67e8f9, #3cc8b6);
-}
-
 :global(.dark) .themeToggle {
   background: #0f172a;
   color: #f8fafc;
   border-color: rgba(255, 255, 255, 0.15);
-}
-
-:global(.dark) .primary {
-  background: #56c1b0;
-  color: #06151b;
-}
-
-:global(.dark) .primary:hover {
-  background: #4bb29f;
-}
-
-:global(.dark) .secondary {
-  color: #67e8f9;
-  border-color: #67e8f9;
-}
-
-:global(.dark) .secondary:hover {
-  background: rgba(56, 189, 248, 0.15);
 }
 
 :global(.dark) .main {
@@ -828,23 +803,13 @@
   color: #e2e8f0;
 }
 
-:global(.dark) .tableRow:hover {
-  background: rgba(56, 189, 248, 0.18);
-}
-
-:global(.dark) .tableRowActive {
-  background: rgba(56, 189, 248, 0.24);
-  outline-color: rgba(56, 189, 248, 0.5);
-}
-
 :global(.dark) .tableHeaderRow {
   background: rgba(86, 193, 176, 0.26);
   color: #f8fafc;
 }
 
-:global(.dark) .slidesTable {
-  background: rgba(14, 26, 36, 0.85);
-  border-color: rgba(56, 189, 248, 0.25);
+:global(.dark) .tableHeaderRow > div {
+  color: #f8fafc;
 }
 
 :global(.dark) .ghostButton {
@@ -859,37 +824,12 @@
 :global(.dark) .outlineButton {
   color: #56c1b0;
   border-color: rgba(86, 193, 176, 0.6);
+  background: rgba(30, 41, 59, 0.6);
 }
 
 :global(.dark) .outlineButton:hover {
   background: rgba(56, 189, 248, 0.15);
-}
-
-:global(.dark) .emptyState {
-  color: rgba(226, 232, 240, 0.7);
-}
-
-:global(.dark) .commentText {
-  color: #e2e8f0;
-}
-
-:global(.dark) .commentComposer textarea {
-  background: rgba(15, 23, 42, 0.85);
-  border-color: rgba(148, 163, 184, 0.28);
-  color: #e2e8f0;
-}
-
-:global(.dark) .commentComposer textarea:focus {
-  border-color: rgba(56, 189, 248, 0.5);
-  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.25);
-}
-
-:global(.dark) .auditPrimary {
-  color: #e2e8f0;
-}
-
-:global(.dark) .auditPrimary span {
-  color: #67e8f9;
+  border-color: rgba(86, 193, 176, 0.8);
 }
 
 :global(.dark) .chatBox {
@@ -905,17 +845,10 @@
 :global(.dark) .chatMessage {
   background: rgba(15, 23, 42, 0.82);
   border-color: rgba(148, 163, 184, 0.2);
-  color: #e2e8f0;
 }
 
 :global(.dark) .chatTimestamp {
   color: #cbd5f5;
-}
-
-:global(.dark) .chatComposer textarea {
-  background: rgba(15, 23, 42, 0.85);
-  border-color: rgba(148, 163, 184, 0.28);
-  color: #e2e8f0;
 }
 
 :global(.dark) .chatToggleButton {
@@ -927,38 +860,203 @@
   border-color: #0f172a;
 }
 
-:global(.dark) .footer {
-  color: #cbd5f5;
+/* Additional dark mode styles for dashboard components */
+:global(.dark) .slidesTable {
+  background: rgba(15, 23, 42, 0.82);
+  border-color: rgba(148, 163, 184, 0.3);
 }
 
-.commentInfo {
-  margin: 0;
-  color: #5f6368;
+:global(.dark) .tableRow:hover {
+  background: rgba(56, 189, 248, 0.15);
 }
 
-:global(.dark) .commentInfo {
-  color: rgba(226, 232, 240, 0.7);
-}
-
-:global(.dark) .commentInfo strong {
-  color: #e2e8f0;
-}
-
-.auditSlideTitle {
-  color: #2b6a64;
-}
-
-:global(.dark) .auditSlideTitle {
-  color: #67e8f9;
-}
-
-:global(.dark) .slidesHeader h2,
-:global(.dark) .commentsPanel h2,
-:global(.dark) .auditSection h2 {
-  color: #e2e8f0;
+:global(.dark) .tableRowActive {
+  background: rgba(56, 189, 248, 0.24);
+  outline-color: rgba(56, 189, 248, 0.5);
 }
 
 :global(.dark) .rowTitle span:first-of-type {
   color: #e2e8f0;
+}
+
+:global(.dark) .commentsPanel {
+  color: #e2e8f0;
+}
+
+:global(.dark) .commentsPanel h2 {
+  color: #e2e8f0;
+}
+
+:global(.dark) .commentList {
+  background: transparent;
+}
+
+:global(.dark) .commentText {
+  color: #e2e8f0;
+}
+
+:global(.dark) .commentComposer textarea {
+  background: rgba(30, 41, 59, 0.8);
+  color: #e2e8f0;
+  border-color: rgba(148, 163, 184, 0.3);
+}
+
+:global(.dark) .commentComposer textarea:focus {
+  border-color: rgba(56, 189, 248, 0.5);
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.25);
+  outline: none;
+}
+
+:global(.dark) .commentComposer textarea::placeholder {
+  color: rgba(226, 232, 240, 0.5);
+}
+
+:global(.dark) .slidesHeader h2 {
+  color: #e2e8f0;
+}
+
+:global(.dark) .auditSection h2 {
+  color: #e2e8f0;
+}
+
+:global(.dark) .auditPrimary {
+  color: #e2e8f0;
+}
+
+:global(.dark) .emptyState {
+  color: rgba(226, 232, 240, 0.7);
+}
+
+:global(.dark) .headingGroup {
+  color: #e2e8f0;
+}
+
+:global(.dark) .header {
+  color: #e2e8f0;
+}
+
+:global(.dark) .footer {
+  color: #cbd5f5;
+}
+
+/* Explicit light mode overrides - ensure light styles apply when .dark class is removed */
+/* These must come AFTER dark mode styles to ensure they override */
+:global(html:not(.dark)) .nav {
+  background: #ffffff !important;
+  border-bottom-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+:global(html:not(.dark)) .main {
+  background: linear-gradient(180deg, #ffffff 0%, #f5f7fa 55%, #eef1f5 100%) !important;
+}
+
+:global(html:not(.dark)) .card,
+:global(html:not(.dark)) .commentCard,
+:global(html:not(.dark)) .auditItem {
+  background: #ffffff !important;
+  border-color: rgba(229, 231, 235, 0.85) !important;
+  box-shadow: 0 16px 32px rgba(15, 23, 42, 0.08) !important;
+}
+
+:global(html:not(.dark)) .tableRow {
+  background: #ffffff !important;
+  color: #202124 !important;
+}
+
+:global(html:not(.dark)) .tableRow:nth-child(even) {
+  background: #f8fafc !important;
+}
+
+:global(html:not(.dark)) .tableHeaderRow {
+  background: rgba(86, 193, 176, 0.16) !important;
+  color: #1f4e45 !important;
+}
+
+:global(html:not(.dark)) .tableHeaderRow > div {
+  color: #1f4e45 !important;
+}
+
+:global(html:not(.dark)) .slidesTable {
+  background: #fcfcfd !important;
+  border-color: rgba(229, 231, 235, 0.9) !important;
+}
+
+:global(html:not(.dark)) .container,
+:global(html:not(.dark)) .heading,
+:global(html:not(.dark)) .subheading,
+:global(html:not(.dark)) .commentText,
+:global(html:not(.dark)) .rowTitle span:first-of-type,
+:global(html:not(.dark)) .commentsPanel h2,
+:global(html:not(.dark)) .auditSection h2,
+:global(html:not(.dark)) .auditPrimary,
+:global(html:not(.dark)) .header,
+:global(html:not(.dark)) .headingGroup {
+  color: #202124 !important;
+}
+
+:global(html:not(.dark)) .subheading,
+:global(html:not(.dark)) .commentMeta,
+:global(html:not(.dark)) .auditMeta,
+:global(html:not(.dark)) .rowTitle span:last-of-type {
+  color: #5f6368 !important;
+}
+
+:global(html:not(.dark)) .commentComposer textarea {
+  background: #ffffff !important;
+  color: #202124 !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+:global(html:not(.dark)) .ghostButton {
+  background: rgba(32, 33, 36, 0.04) !important;
+  color: #202124 !important;
+}
+
+:global(html:not(.dark)) .outlineButton {
+  background: transparent !important;
+  color: #2b6a64 !important;
+  border-color: rgba(86, 193, 176, 0.7) !important;
+}
+
+/* Ensure main::before gradient is reset for light mode */
+:global(html:not(.dark)) .main::before {
+  opacity: 0.4 !important;
+  background:
+    radial-gradient(120% 60% at 110% 20%, rgba(86, 193, 176, 0.18) 0%, rgba(86, 193, 176, 0) 70%),
+    radial-gradient(90% 45% at -10% 10%, rgba(0, 148, 115, 0.18) 0%, rgba(0, 148, 115, 0) 80%),
+    radial-gradient(70% 35% at 50% 95%, rgba(0, 116, 183, 0.12) 0%, rgba(0, 116, 183, 0) 70%) !important;
+}
+
+/* Additional light mode overrides for table hover states */
+:global(html:not(.dark)) .tableRow:hover {
+  background: rgba(86, 193, 176, 0.18) !important;
+}
+
+:global(html:not(.dark)) .tableRowActive {
+  outline-color: rgba(86, 193, 176, 0.4) !important;
+  background: rgba(86, 193, 176, 0.24) !important;
+}
+
+/* Light mode overrides for navigation links */
+:global(html:not(.dark)) .navLink {
+  color: #5f6368 !important;
+}
+
+:global(html:not(.dark)) .navLink:hover {
+  color: #202124 !important;
+}
+
+:global(html:not(.dark)) .navLinkActive {
+  color: #0e3731 !important;
+}
+
+:global(html:not(.dark)) .navLinkActive::after {
+  background: linear-gradient(135deg, #56c1b0, #2d8376) !important;
+}
+
+:global(html:not(.dark)) .themeToggle {
+  background: #ffffff !important;
+  color: #333 !important;
+  border-color: rgba(0, 0, 0, 0.1) !important;
 }
 

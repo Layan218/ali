@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import TeamChatWidget from "@/components/TeamChatWidget";
+import ThemeToggle from "@/components/ThemeToggle";
 import { useTheme } from "@/hooks/useTheme";
 import styles from "./training-deck.module.css";
 
@@ -20,9 +21,9 @@ const defaultSlides: TrainingSlide[] = [
 ];
 
 export default function TrainingDeckPage() {
+  const { theme } = useTheme(); // Initialize theme hook to ensure dark class is applied
   const router = useRouter();
   const pathname = usePathname();
-  const { theme, toggleTheme, mounted } = useTheme();
   const [slides, setSlides] = useState(defaultSlides);
   const [activeSlideId, setActiveSlideId] = useState(defaultSlides[0].id);
 
@@ -59,33 +60,7 @@ export default function TrainingDeckPage() {
           </div>
         </div>
         <div className={styles.topRightActions}>
-          <button
-            type="button"
-            aria-label="Toggle dark mode"
-            onClick={toggleTheme}
-            className={styles.themeToggle}
-          >
-            {!mounted ? (
-              // Render moon icon during SSR to avoid hydration mismatch
-              <svg className={`${styles.icon} ${styles.iconSpin}`} width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" stroke="currentColor" strokeWidth="1.8" fill="none" />
-              </svg>
-            ) : theme === "dark" ? (
-              <svg className={`${styles.icon} ${styles.iconSpin}`} width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 18a6 6 0 1 0 0-12 6 6 0 0 0 0 12Z" stroke="currentColor" strokeWidth="1.8" />
-                <path
-                  d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                />
-              </svg>
-            ) : (
-              <svg className={`${styles.icon} ${styles.iconSpin}`} width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" stroke="currentColor" strokeWidth="1.8" fill="none" />
-              </svg>
-            )}
-          </button>
+          <ThemeToggle />
           <button type="button" className={styles.primary} onClick={() => router.push("/presentations")}>
             Slides Home
           </button>

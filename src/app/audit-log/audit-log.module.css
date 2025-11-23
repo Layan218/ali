@@ -337,6 +337,7 @@
   }
 }
 
+/* Dark Mode Styles - Using :global(.dark) to work with theme toggle */
 :global(.dark) .nav {
   background: rgba(10, 19, 28, 0.92);
   border-bottom-color: rgba(148, 163, 184, 0.2);
@@ -369,17 +370,9 @@
   color: #06151b;
 }
 
-:global(.dark) .primary:hover {
-  background: #4bb29f;
-}
-
 :global(.dark) .secondary {
   color: #67e8f9;
   border-color: #67e8f9;
-}
-
-:global(.dark) .secondary:hover {
-  background: rgba(56, 189, 248, 0.15);
 }
 
 :global(.dark) .main {
@@ -389,7 +382,7 @@
 :global(.dark) .main::before {
   opacity: 0.35;
   background:
-    radial-gradient(120% 60% at 110% 20%, rgba(56, 189, 184, 0.22) 0%, rgba(56, 189, 184, 0) 70%),
+    radial-gradient(120% 60% at 110% 20%, rgba(56, 189, 184, 0.24) 0%, rgba(56, 189, 184, 0) 70%),
     radial-gradient(90% 45% at -10% 10%, rgba(22, 163, 190, 0.24) 0%, rgba(22, 163, 190, 0) 80%),
     radial-gradient(70% 35% at 50% 95%, rgba(14, 165, 233, 0.18) 0%, rgba(14, 165, 233, 0) 70%);
 }
@@ -411,7 +404,7 @@
 }
 
 :global(.dark) .tableWrap {
-  background: rgba(14, 26, 36, 0.85);
+  background: rgba(14, 26, 36, 0.92);
   border-color: rgba(56, 189, 248, 0.25);
 }
 
@@ -430,10 +423,6 @@
   color: rgba(226, 232, 240, 0.88);
 }
 
-:global(.dark) .tableBodyCell:first-child {
-  color: #67e8f9;
-}
-
 :global(.dark) .tableBodyRow:nth-child(odd) {
   background: rgba(14, 26, 36, 0.55);
 }
@@ -448,17 +437,80 @@
 }
 
 :global(.dark) .footer {
-  color: rgba(226, 232, 240, 0.6);
-}
-
-.loadingMessage,
-.emptyMessage {
-  padding: 40px 20px;
-  text-align: center;
-  color: #5f6368;
-}
-
-:global(.dark) .loadingMessage,
-:global(.dark) .emptyMessage {
   color: rgba(226, 232, 240, 0.7);
+}
+
+/* Explicit light mode overrides - ensure light styles apply when .dark class is removed */
+:global(html:not(.dark)) .nav {
+  background: #ffffff !important;
+  border-bottom-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+:global(html:not(.dark)) .main {
+  background: linear-gradient(180deg, #ffffff 0%, #f5f9fb 55%, #edf2f6 100%) !important;
+}
+
+:global(html:not(.dark)) .logsCard {
+  background: rgba(255, 255, 255, 0.96) !important;
+  border-color: rgba(86, 193, 176, 0.18) !important;
+  box-shadow: 0 30px 60px rgba(15, 35, 45, 0.12) !important;
+}
+
+:global(html:not(.dark)) .cardHeader h2 {
+  color: #0f2f35 !important;
+}
+
+:global(html:not(.dark)) .tableWrap {
+  background: rgba(255, 255, 255, 0.98) !important;
+  border-color: rgba(229, 231, 235, 0.8) !important;
+}
+
+:global(html:not(.dark)) .table {
+  color: #1a2f35 !important;
+}
+
+:global(html:not(.dark)) .tableHeaderCell {
+  background: rgba(236, 245, 247, 0.95) !important;
+  color: #0f2f35 !important;
+  border-bottom-color: rgba(213, 218, 220, 0.9) !important;
+}
+
+:global(html:not(.dark)) .tableBodyCell {
+  border-bottom-color: rgba(229, 231, 235, 0.7) !important;
+  color: #1a2f35 !important;
+}
+
+:global(html:not(.dark)) .tableBodyRow:nth-child(odd) {
+  background: rgba(246, 250, 251, 0.7) !important;
+}
+
+:global(html:not(.dark)) .tableBodyRow:hover {
+  background: rgba(86, 193, 176, 0.1) !important;
+}
+
+:global(html:not(.dark)) .tableBodyCell:first-child {
+  color: #20524a !important;
+}
+
+:global(html:not(.dark)) .entryCount {
+  color: rgba(22, 48, 57, 0.55) !important;
+  background: rgba(86, 193, 176, 0.12) !important;
+}
+
+:global(html:not(.dark)) .container,
+:global(html:not(.dark)) .title,
+:global(html:not(.dark)) .subtitle {
+  color: inherit !important;
+}
+
+:global(html:not(.dark)) .title {
+  color: #0f2f35 !important;
+}
+
+:global(html:not(.dark)) .subtitle {
+  color: rgba(22, 48, 57, 0.72) !important;
+}
+
+:global(html:not(.dark)) .footer {
+  color: rgba(22, 48, 57, 0.64) !important;
 }

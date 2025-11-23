@@ -1,14 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { collection, query, orderBy, onSnapshot } from "firebase/firestore";
-import { db } from "@/lib/firebase";
-import { useAuth } from "@/context/AuthContext";
 import TeamChatWidget from "@/components/TeamChatWidget";
 import styles from "./audit-log.module.css";
 import { useRouter } from "next/navigation";
+import ThemeToggle from "@/components/ThemeToggle";
 import { useTheme } from "@/hooks/useTheme";
 
 type LogEntry = {
@@ -19,64 +16,34 @@ type LogEntry = {
   details: string;
 };
 
+const logEntries: LogEntry[] = [
+  {
+    id: "log-1",
+    timestamp: "2025-06-17 12:30",
+    user: "reem.saad",
+    action: "Edited slide",
+    details: "Updated title for Q2 Strategy Briefing",
+  },
+  {
+    id: "log-2",
+    timestamp: "2025-06-17 12:10",
+    user: "r.alqahtani",
+    action: "Viewed presentation",
+    details: "Opened in Presentation Mode",
+  },
+  {
+    id: "log-3",
+    timestamp: "2025-06-17 11:45",
+    user: "l.fernandez",
+    action: "Commented",
+    details: "Added note on maintenance backlog",
+  },
+];
+
 export default function AuditLogPage() {
-  const { theme, toggleTheme, mounted } = useTheme();
+  const { theme } = useTheme(); // Initialize theme hook to ensure dark class is applied
   const pathname = usePathname();
   const router = useRouter();
-  const { user } = useAuth();
-  const [logEntries, setLogEntries] = useState<LogEntry[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  // Load audit logs from Firestore
-  useEffect(() => {
-    setIsLoading(true);
-
-    const auditLogsRef = collection(db, "auditLogs");
-    const auditLogsQuery = query(auditLogsRef, orderBy("createdAt", "desc"));
-
-    const unsubscribe = onSnapshot(
-      auditLogsQuery,
-      (snapshot) => {
-        const loadedLogs: LogEntry[] = snapshot.docs.map((docSnap) => {
-          const data = docSnap.data();
-          const createdAt = data.createdAt?.toDate ? data.createdAt.toDate() : null;
-
-          let timestampLabel = "";
-          if (createdAt instanceof Date && !Number.isNaN(createdAt.getTime())) {
-            timestampLabel = createdAt.toLocaleString("en-US", {
-              year: "numeric",
-              month: "2-digit",
-              day: "2-digit",
-              hour: "2-digit",
-              minute: "2-digit",
-            });
-          }
-
-          const action = data.action || "viewed";
-          const details = data.details?.title || data.details?.slideTitle || "No details available";
-          const userEmail = data.userEmail || "Unknown user";
-          const userName = userEmail.split("@")[0] || userEmail;
-
-          return {
-            id: docSnap.id,
-            timestamp: timestampLabel,
-            user: userName,
-            action: action.toLowerCase().replace(/_/g, " "),
-            details: typeof details === "string" ? details : JSON.stringify(details),
-          };
-        });
-
-        setLogEntries(loadedLogs);
-        setIsLoading(false);
-      },
-      (error) => {
-        console.error("Failed to load audit logs:", error);
-        setIsLoading(false);
-      }
-    );
-
-    return () => unsubscribe();
-  }, []);
 
   return (
     <>
@@ -99,64 +66,7 @@ export default function AuditLogPage() {
           </div>
         </div>
         <div className={styles.topRightActions}>
-          <button
-            type="button"
-            aria-label="Toggle dark mode"
-            onClick={toggleTheme}
-            className={styles.themeToggle}
-          >
-            {!mounted ? (
-              // Render moon icon during SSR to avoid hydration mismatch
-              <svg
-                className={`${styles.icon} ${styles.iconSpin}`}
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  fill="none"
-                />
-              </svg>
-            ) : theme === "dark" ? (
-              <svg
-                className={`${styles.icon} ${styles.iconSpin}`}
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path d="M12 18a6 6 0 1 0 0-12 6 6 0 0 0 0 12Z" stroke="currentColor" strokeWidth="1.8" />
-                <path
-                  d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                />
-              </svg>
-            ) : (
-              <svg
-                className={`${styles.icon} ${styles.iconSpin}`}
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  fill="none"
-                />
-              </svg>
-            )}
-          </button>
+          <ThemeToggle />
           <button
             type="button"
             className={styles.primary}
@@ -185,44 +95,34 @@ export default function AuditLogPage() {
               <span className={styles.entryCount}>{logEntries.length} entries</span>
             </div>
             <div className={styles.tableWrap}>
-              {isLoading ? (
-                <div className={styles.loadingMessage}>
-                  Loading activity logs...
-                </div>
-              ) : logEntries.length === 0 ? (
-                <div className={styles.emptyMessage}>
-                  No activity logs yet. Actions will appear here as you use the application.
-                </div>
-              ) : (
-                <table className={styles.table}>
-                  <thead>
-                    <tr>
-                      <th scope="col" className={styles.tableHeaderCell}>
-                        Date &amp; Time
-                      </th>
-                      <th scope="col" className={styles.tableHeaderCell}>
-                        User
-                      </th>
-                      <th scope="col" className={styles.tableHeaderCell}>
-                        Action
-                      </th>
-                      <th scope="col" className={styles.tableHeaderCell}>
-                        Details
-                      </th>
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th scope="col" className={styles.tableHeaderCell}>
+                      Date &amp; Time
+                    </th>
+                    <th scope="col" className={styles.tableHeaderCell}>
+                      User
+                    </th>
+                    <th scope="col" className={styles.tableHeaderCell}>
+                      Action
+                    </th>
+                    <th scope="col" className={styles.tableHeaderCell}>
+                      Details
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className={styles.tableBody}>
+                  {logEntries.map((entry) => (
+                    <tr key={entry.id} className={styles.tableBodyRow}>
+                      <td className={styles.tableBodyCell}>{entry.timestamp}</td>
+                      <td className={styles.tableBodyCell}>{entry.user}</td>
+                      <td className={styles.tableBodyCell}>{entry.action}</td>
+                      <td className={styles.tableBodyCell}>{entry.details}</td>
                     </tr>
-                  </thead>
-                  <tbody className={styles.tableBody}>
-                    {logEntries.map((entry) => (
-                      <tr key={entry.id} className={styles.tableBodyRow}>
-                        <td className={styles.tableBodyCell}>{entry.timestamp}</td>
-                        <td className={styles.tableBodyCell}>{entry.user}</td>
-                        <td className={styles.tableBodyCell}>{entry.action}</td>
-                        <td className={styles.tableBodyCell}>{entry.details}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
+                  ))}
+                </tbody>
+              </table>
             </div>
           </section>
         </div>

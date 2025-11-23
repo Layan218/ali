@@ -378,18 +378,38 @@ export default function EditorToolbar({
             </button>
             {isColorPickerOpen && !toolbarDisabled ? (
               <div className={styles.colorPopover}>
-                {colorOptions.map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    className={`${styles.colorOption} ${
-                      option.value === "transparent" ? styles.colorOptionTransparent : ""
-                    }`}
-                    style={{ backgroundColor: option.value === "transparent" ? undefined : option.value }}
-                    onClick={() => onTextColorSelect(option.value)}
-                    aria-label={`Set text color to ${option.name}`}
+                <div style={{ padding: "8px", borderBottom: "1px solid rgba(0,0,0,0.1)" }}>
+                  <label style={{ display: "block", fontSize: "12px", marginBottom: "4px", fontWeight: 500 }}>
+                    Custom Color
+                  </label>
+                  <input
+                    type="color"
+                    value={commandState.color === "transparent" ? "#202124" : commandState.color}
+                    onChange={(e) => onTextColorSelect(e.target.value)}
+                    style={{
+                      width: "100%",
+                      height: "32px",
+                      border: "1px solid rgba(0,0,0,0.2)",
+                      borderRadius: "4px",
+                      cursor: "pointer",
+                    }}
+                    aria-label="Custom color picker"
                   />
-                ))}
+                </div>
+                <div style={{ padding: "8px", display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "4px" }}>
+                  {colorOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={`${styles.colorOption} ${
+                        option.value === "transparent" ? styles.colorOptionTransparent : ""
+                      }`}
+                      style={{ backgroundColor: option.value === "transparent" ? undefined : option.value }}
+                      onClick={() => onTextColorSelect(option.value)}
+                      aria-label={`Set text color to ${option.name}`}
+                    />
+                  ))}
+                </div>
               </div>
             ) : null}
           </div>

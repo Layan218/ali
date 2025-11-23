@@ -1,0 +1,41 @@
+/* Theme toggle button */
+.themeToggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 9999px;
+  background: #ffffff;
+  color: #333;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.themeToggle:hover {
+  box-shadow: 0 4px 12px rgba(86, 193, 176, 0.25);
+  outline: 0;
+}
+
+.icon {
+  display: block;
+  color: inherit;
+  transition: transform 0.35s ease, opacity 0.2s ease;
+}
+
+.iconSpin {
+  will-change: transform;
+}
+
+:global(.dark) .themeToggle {
+  background: rgba(15, 23, 42, 0.92);
+  border-color: rgba(45, 212, 191, 0.55);
+  color: #f0fdfa;
+}
+
+:global(.dark) .themeToggle:hover {
+  background: rgba(17, 43, 52, 0.92);
+  border-color: rgba(45, 212, 191, 0.65);
+}
+

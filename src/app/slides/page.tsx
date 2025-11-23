@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
-import { useTheme } from "@/hooks/useTheme";
+import ThemeToggle from "@/components/ThemeToggle";
 import { useAuth } from "@/context/AuthContext";
 import styles from "./slides.module.css";
 
@@ -36,7 +36,6 @@ const templates: TemplateCard[] = [
 const recents: RecentPresentation[] = [];
 
 export default function SlidesHome() {
-  const { theme, toggleTheme } = useTheme();
   const { user, loading } = useAuth();
   const router = useRouter();
 
@@ -55,23 +54,7 @@ export default function SlidesHome() {
         </div>
         <div className={styles.navLinks} />
         <div className={styles.topRightActions}>
-          <button
-            type="button"
-            aria-label="Toggle dark mode"
-            onClick={toggleTheme}
-            className={styles.themeToggle}
-          >
-            {theme === "dark" ? (
-              <svg className={`${styles.icon} ${styles.iconSpin}`} width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 18a6 6 0 1 0 0-12 6 6 0 0 0 0 12Z" stroke="currentColor" strokeWidth="1.8"/>
-                <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
-              </svg>
-            ) : (
-              <svg className={`${styles.icon} ${styles.iconSpin}`} width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" stroke="currentColor" strokeWidth="1.8" fill="none"/>
-              </svg>
-            )}
-          </button>
+          <ThemeToggle />
           {!loading && !user ? (
             <button className={styles.primary} type="button" onClick={() => router.push("/login")}>
               Sign in

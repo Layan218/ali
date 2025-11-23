@@ -1,32 +1,25 @@
 "use client";
 
-import { Suspense, useMemo, useState, useEffect } from "react";
+import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { collection, query, where, orderBy, getDocs, onSnapshot, Timestamp } from "firebase/firestore";
-import { onAuthStateChanged } from "firebase/auth";
-import { auth, db } from "@/lib/firebase";
-import { decryptText } from "@/lib/encryption";
 import TeamChatWidget from "@/components/TeamChatWidget";
+import ThemeToggle from "@/components/ThemeToggle";
 import { useTheme } from "@/hooks/useTheme";
-import { useAuth } from "@/context/AuthContext";
 import styles from "./dashboard.module.css";
 
 const VIEWER_RETURN_KEY = "viewer-return-url";
 
-type Presentation = {
+type Slide = {
   id: string;
   title: string;
-  updatedAt: Date | null;
-  createdAt: Date | null;
+  updatedAt: string;
   role: "Viewer" | "Editor" | "Owner";
-  ownerId: string;
-  status?: "draft" | "final";
 };
 
 type Comment = {
   id: string;
-  presentationId: string;
+  slideId: string;
   author: string;
   content: string;
   timestamp: string;
@@ -35,226 +28,86 @@ type Comment = {
 type AuditLogEntry = {
   id: string;
   actor: string;
-  action: string;
+  action: "created" | "edited" | "viewed" | "presentation";
   slideTitle: string;
   timestamp: string;
 };
 
+const slides: Slide[] = [
+  { id: "slide-ops-review", title: "Operations Review – Q3", updatedAt: "5 minutes ago", role: "Editor" },
+  { id: "slide-forecast", title: "Demand Forecast 2026", updatedAt: "14 minutes ago", role: "Viewer" },
+  { id: "slide-security", title: "Security Posture Update", updatedAt: "1 hour ago", role: "Owner" },
+  { id: "slide-innovation", title: "Innovation Lab Showcase", updatedAt: "Yesterday", role: "Editor" },
+];
+
+const comments: Comment[] = [
+  {
+    id: "comment-1",
+    slideId: "slide-ops-review",
+    author: "R. Al-Qahtani",
+    content: "Please refresh the KPI chart with the latest numbers before tomorrow.",
+    timestamp: "4 minutes ago",
+  },
+  {
+    id: "comment-2",
+    slideId: "slide-ops-review",
+    author: "L. Fernandez",
+    content: "Added notes on the maintenance backlog—double-check the percentages.",
+    timestamp: "18 minutes ago",
+  },
+  {
+    id: "comment-3",
+    slideId: "slide-forecast",
+    author: "A. Gupta",
+    content: "Consider adding a sensitivity analysis for the pricing scenario.",
+    timestamp: "30 minutes ago",
+  },
+  {
+    id: "comment-4",
+    slideId: "slide-security",
+    author: "M. Al-Hassan",
+    content: "We need a dedicated slide on zero-trust roadmap milestones.",
+    timestamp: "1 hour ago",
+  },
+];
+
+const auditLog: AuditLogEntry[] = [
+  { id: "audit-1", actor: "You", action: "edited", slideTitle: "Operations Review – Q3", timestamp: "Just now" },
+  { id: "audit-2", actor: "L. Fernandez", action: "viewed", slideTitle: "Demand Forecast 2026", timestamp: "7 minutes ago" },
+  { id: "audit-3", actor: "R. Al-Qahtani", action: "presentation", slideTitle: "Security Posture Update", timestamp: "25 minutes ago" },
+  { id: "audit-4", actor: "You", action: "created", slideTitle: "Innovation Lab Showcase", timestamp: "Yesterday" },
+];
+
+function describeAction(action: AuditLogEntry["action"]) {
+  switch (action) {
+    case "created":
+      return "created";
+    case "edited":
+      return "edited";
+    case "presentation":
+      return "entered presentation mode";
+    case "viewed":
+    default:
+      return "viewed";
+  }
+}
 
 function DashboardContent() {
-  const { theme, toggleTheme, mounted } = useTheme();
+  const { theme } = useTheme(); // Initialize theme hook to ensure dark class is applied
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user } = useAuth();
-  const [presentations, setPresentations] = useState<Presentation[]>([]);
-  const [comments, setComments] = useState<Comment[]>([]);
-  const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [selectedPresentationId, setSelectedPresentationId] = useState<string | null>(null);
-  
-  const selectedPresentation = useMemo(
-    () => presentations.find((p) => p.id === selectedPresentationId) ?? presentations[0] ?? null,
-    [presentations, selectedPresentationId]
+  const presentationId = searchParams.get("presentationId") ?? "presentation-deep-learning";
+  const [selectedSlideId, setSelectedSlideId] = useState(slides[0]?.id ?? "");
+  const selectedSlide = useMemo(
+    () => slides.find((slide) => slide.id === selectedSlideId) ?? slides[0] ?? null,
+    [selectedSlideId]
   );
 
-  // Load presentations from Firestore
-  useEffect(() => {
-    if (!user?.uid) {
-      setIsLoading(false);
-      return;
-    }
-
-    setIsLoading(true);
-    
-    // Query presentations where user is owner (filter for shared ones client-side)
-    const presentationsRef = collection(db, "presentations");
-    const presentationsQuery = query(
-      presentationsRef,
-      where("ownerId", "==", user.uid)
-      // Note: Removed orderBy to avoid requiring a composite index
-      // We'll sort client-side instead
-    );
-
-    const unsubscribe = onSnapshot(
-      presentationsQuery,
-      (snapshot) => {
-        const loadedPresentations: Presentation[] = [];
-        
-        for (const docSnap of snapshot.docs) {
-          const data = docSnap.data();
-          // Only show presentations that are shared (isShared === true)
-          // This is the team dashboard, so only show shared presentations
-          const isShared = data.isShared === true;
-          if (!isShared) {
-            continue; // Skip private presentations
-          }
-          
-          const updatedAt = data.updatedAt?.toDate ? data.updatedAt.toDate() : null;
-          const createdAt = data.createdAt?.toDate ? data.createdAt.toDate() : null;
-          
-          loadedPresentations.push({
-            id: docSnap.id,
-            title: data.title || "Untitled Presentation",
-            updatedAt,
-            createdAt,
-            role: "Owner" as const,
-            ownerId: data.ownerId || "",
-            status: data.status || "draft",
-          });
-        }
-        
-        // Sort by updatedAt descending (client-side)
-        loadedPresentations.sort((a, b) => {
-          const aTime = a.updatedAt?.getTime() || 0;
-          const bTime = b.updatedAt?.getTime() || 0;
-          return bTime - aTime;
-        });
-        
-        setPresentations(loadedPresentations);
-        
-        // Auto-select first presentation if none selected
-        if (!selectedPresentationId && loadedPresentations.length > 0) {
-          setSelectedPresentationId(loadedPresentations[0].id);
-        }
-        
-        setIsLoading(false);
-      },
-      (error) => {
-        console.error("Failed to load presentations:", error);
-        setIsLoading(false);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [user?.uid, selectedPresentationId]);
-
-  // Load comments for selected presentation
-  useEffect(() => {
-    if (!selectedPresentation?.id) {
-      setComments([]);
-      return;
-    }
-
-    const commentsRef = collection(db, "presentations", selectedPresentation.id, "comments");
-    const commentsQuery = query(commentsRef, orderBy("createdAt", "desc"));
-
-    const unsubscribe = onSnapshot(
-      commentsQuery,
-      (snapshot) => {
-        const loadedComments: Comment[] = snapshot.docs.map((docSnap) => {
-          const data = docSnap.data();
-          const rawText = typeof data.text === "string" ? data.text : "";
-          const decrypted = rawText ? decryptText(rawText) : "";
-          const finalText = decrypted || rawText || "";
-
-          let timestampLabel = "";
-          const createdAt = data.createdAt?.toDate ? data.createdAt.toDate() : null;
-          if (createdAt instanceof Date && !Number.isNaN(createdAt.getTime())) {
-            const now = new Date();
-            const diffMs = now.getTime() - createdAt.getTime();
-            const diffMins = Math.floor(diffMs / 60000);
-            const diffHours = Math.floor(diffMs / 3600000);
-            const diffDays = Math.floor(diffMs / 86400000);
-            
-            if (diffMins < 1) timestampLabel = "Just now";
-            else if (diffMins < 60) timestampLabel = `${diffMins} minute${diffMins > 1 ? "s" : ""} ago`;
-            else if (diffHours < 24) timestampLabel = `${diffHours} hour${diffHours > 1 ? "s" : ""} ago`;
-            else if (diffDays === 1) timestampLabel = "Yesterday";
-            else timestampLabel = `${diffDays} days ago`;
-          }
-
-          return {
-            id: docSnap.id,
-            presentationId: selectedPresentation.id,
-            author: typeof data.userName === "string" && data.userName.length > 0 ? data.userName : "Team member",
-            content: finalText,
-            timestamp: timestampLabel,
-          };
-        });
-
-        setComments(loadedComments);
-      },
-      (error) => {
-        console.error("Failed to load comments:", error);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [selectedPresentation?.id]);
-
-  // Load audit logs
-  useEffect(() => {
-    if (!user?.uid) {
-      setAuditLog([]);
-      return;
-    }
-
-    const auditLogsRef = collection(db, "auditLogs");
-    const auditLogsQuery = query(auditLogsRef, orderBy("createdAt", "desc"));
-
-    const unsubscribe = onSnapshot(
-      auditLogsQuery,
-      (snapshot) => {
-        const loadedLogs: AuditLogEntry[] = snapshot.docs.slice(0, 20).map((docSnap) => {
-          const data = docSnap.data();
-          const createdAt = data.createdAt?.toDate ? data.createdAt.toDate() : null;
-          
-          let timestampLabel = "";
-          if (createdAt instanceof Date && !Number.isNaN(createdAt.getTime())) {
-            const now = new Date();
-            const diffMs = now.getTime() - createdAt.getTime();
-            const diffMins = Math.floor(diffMs / 60000);
-            const diffHours = Math.floor(diffMs / 3600000);
-            const diffDays = Math.floor(diffMs / 86400000);
-            
-            if (diffMins < 1) timestampLabel = "Just now";
-            else if (diffMins < 60) timestampLabel = `${diffMins} minute${diffMins > 1 ? "s" : ""} ago`;
-            else if (diffHours < 24) timestampLabel = `${diffHours} hour${diffHours > 1 ? "s" : ""} ago`;
-            else if (diffDays === 1) timestampLabel = "Yesterday";
-            else timestampLabel = `${diffDays} days ago`;
-          }
-
-          const action = data.action || "viewed";
-          const slideTitle = data.details?.title || "Unknown presentation";
-          const actor = data.userEmail || "Unknown user";
-          const isCurrentUser = data.userId === user.uid;
-
-          return {
-            id: docSnap.id,
-            actor: isCurrentUser ? "You" : actor.split("@")[0] || actor,
-            action: action.toLowerCase().replace(/_/g, " "),
-            slideTitle,
-            timestamp: timestampLabel,
-          };
-        });
-
-        setAuditLog(loadedLogs);
-      },
-      (error) => {
-        console.error("Failed to load audit logs:", error);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [user?.uid]);
-
-  // Format date for display
-  const formatDate = (date: Date | null): string => {
-    if (!date) return "Unknown";
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-    
-    if (diffMins < 1) return "Just now";
-    if (diffMins < 60) return `${diffMins} minute${diffMins > 1 ? "s" : ""} ago`;
-    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? "s" : ""} ago`;
-    if (diffDays === 1) return "Yesterday";
-    if (diffDays < 7) return `${diffDays} days ago`;
-    return date.toLocaleDateString();
-  };
+  const visibleComments = useMemo(() => {
+    if (!selectedSlide) return [] as Comment[];
+    return comments.filter((comment) => comment.slideId === selectedSlide.id);
+  }, [selectedSlide]);
 
   return (
     <>
@@ -277,64 +130,7 @@ function DashboardContent() {
           </div>
         </div>
         <div className={styles.topRightActions}>
-          <button
-            type="button"
-            aria-label="Toggle dark mode"
-            onClick={toggleTheme}
-            className={styles.themeToggle}
-          >
-            {!mounted ? (
-              // Render moon icon during SSR to avoid hydration mismatch
-              <svg
-                className={`${styles.icon} ${styles.iconSpin}`}
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  fill="none"
-                />
-              </svg>
-            ) : theme === "dark" ? (
-              <svg
-                className={`${styles.icon} ${styles.iconSpin}`}
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path d="M12 18a6 6 0 1 0 0-12 6 6 0 0 0 0 12Z" stroke="currentColor" strokeWidth="1.8" />
-                <path
-                  d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                />
-              </svg>
-            ) : (
-              <svg
-                className={`${styles.icon} ${styles.iconSpin}`}
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  fill="none"
-                />
-              </svg>
-            )}
-          </button>
+          <ThemeToggle />
           <button
             type="button"
             className={styles.primary}
@@ -381,33 +177,31 @@ function DashboardContent() {
                     <div>Actions</div>
                   </div>
 
-                  {isLoading ? (
-                    <div className={styles.emptyState}>Loading presentations...</div>
-                  ) : presentations.length === 0 ? (
-                    <div className={styles.emptyState}>You have no presentations yet. Click "Create New Slide" to get started.</div>
+                  {slides.length === 0 ? (
+                    <div className={styles.emptyState}>You have no slides yet. Click “Create New Slide” to get started.</div>
                   ) : (
-                    presentations.map((presentation) => {
-                      const isActive = selectedPresentation?.id === presentation.id;
+                    slides.map((slide) => {
+                      const isActive = selectedSlide?.id === slide.id;
                       return (
                         <div
-                          key={presentation.id}
+                          key={slide.id}
                           role="listitem"
                           className={`${styles.tableRow} ${isActive ? styles.tableRowActive : ""}`}
-                          onClick={() => setSelectedPresentationId(presentation.id)}
+                          onClick={() => setSelectedSlideId(slide.id)}
                         >
                           <div className={styles.rowTitle}>
-                            <span>{presentation.title}</span>
-                            <span>ID: {presentation.id.substring(0, 8)}...</span>
+                            <span>{slide.title}</span>
+                            <span>ID: {slide.id}</span>
                           </div>
-                          <div>{formatDate(presentation.updatedAt)}</div>
-                          <div>{presentation.role}</div>
+                          <div>{slide.updatedAt}</div>
+                          <div>{slide.role}</div>
                           <div className={styles.actions}>
                             <button
                               type="button"
                               className={styles.outlineButton}
                               onClick={(event) => {
                                 event.stopPropagation();
-                                router.push(`/editor?presentationId=${encodeURIComponent(presentation.id)}&slideId=slide-1`);
+                                router.push("/editor?presentationId=slide-ops-review&slideId=slide-1");
                               }}
                             >
                               Edit
@@ -423,7 +217,7 @@ function DashboardContent() {
                                     `${window.location.pathname}${window.location.search}`
                                   );
                                 }
-                                router.push(`/viewer?presentationId=${encodeURIComponent(presentation.id)}&slideId=slide-1`);
+                                router.push("/viewer?presentationId=slide-ops-review&slideId=slide-1");
                               }}
                             >
                               Presentation Mode
@@ -438,19 +232,19 @@ function DashboardContent() {
 
               <aside className={`${styles.commentsPanel} ${styles.card}`}>
                 <h2>Comments</h2>
-                {selectedPresentation ? (
-                  <p className={styles.commentInfo}>
-                    Viewing feedback for <strong>{selectedPresentation.title}</strong>
+                {selectedSlide ? (
+                  <p style={{ margin: 0, color: "#5f6368" }}>
+                    Viewing feedback for <strong>{selectedSlide.title}</strong>
                   </p>
                 ) : null}
 
                 <div className={styles.commentList}>
-                  {comments.length === 0 ? (
+                  {visibleComments.length === 0 ? (
                     <div className={styles.emptyState} style={{ padding: "20px 12px" }}>
-                      {selectedPresentation ? "No comments yet for this presentation." : "Select a presentation to view comments."}
+                      No comments yet for this slide.
                     </div>
                   ) : (
-                    comments.map((comment) => (
+                    visibleComments.map((comment) => (
                       <div key={comment.id} className={styles.commentCard}>
                         <div className={styles.commentMeta}>
                           <span>{comment.author}</span>
@@ -462,36 +256,28 @@ function DashboardContent() {
                   )}
                 </div>
 
-                {selectedPresentation && (
                 <div className={styles.commentComposer}>
                   <textarea placeholder="Leave a quick update for your team…" aria-label="Add a comment" />
                   <button type="button" className={styles.outlineButton}>
                     Add Comment
                   </button>
                 </div>
-                )}
               </aside>
             </div>
 
             <section id="audit" className={`${styles.auditSection} ${styles.card}`}>
               <h2>Audit Log</h2>
-              {auditLog.length === 0 ? (
-                <div className={styles.emptyState} style={{ padding: "20px 12px" }}>
-                  No audit log entries yet.
-                </div>
-              ) : (
               <ul className={styles.auditList}>
                 {auditLog.map((entry) => (
                   <li key={entry.id} className={styles.auditItem}>
                     <div className={styles.auditPrimary}>
-                        {entry.actor} {entry.action} {" "}
-                      <span className={styles.auditSlideTitle}>{entry.slideTitle}</span>
+                      {entry.actor} {describeAction(entry.action)} {" "}
+                      <span style={{ color: "#2b6a64" }}>{entry.slideTitle}</span>
                     </div>
                     <div className={styles.auditMeta}>{entry.timestamp}</div>
                   </li>
                 ))}
               </ul>
-              )}
             </section>
           </div>
         </div>
