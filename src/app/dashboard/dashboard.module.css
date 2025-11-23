@@ -742,17 +742,17 @@
 }
 
 :global(.dark) .nav {
-  background: #0f172a;
-  border-bottom-color: rgba(255, 255, 255, 0.08);
-}
+    background: #0f172a;
+    border-bottom-color: rgba(255, 255, 255, 0.08);
+  }
 
 :global(.dark) .navLink {
-  color: #f8fafc;
-}
+    color: #f8fafc;
+  }
 
 :global(.dark) .navLink:hover {
-  color: #e2e8f0;
-}
+    color: #e2e8f0;
+  }
 
 :global(.dark) .navLinkActive {
   color: #67e8f9;
@@ -763,10 +763,10 @@
 }
 
 :global(.dark) .themeToggle {
-  background: #0f172a;
-  color: #f8fafc;
-  border-color: rgba(255, 255, 255, 0.15);
-}
+    background: #0f172a;
+    color: #f8fafc;
+    border-color: rgba(255, 255, 255, 0.15);
+  }
 
 :global(.dark) .primary {
   background: #56c1b0;
@@ -787,44 +787,44 @@
 }
 
 :global(.dark) .main {
-  background: linear-gradient(180deg, #0f172a 0%, #0b1325 55%, #090f1f 100%);
-}
+    background: linear-gradient(180deg, #0f172a 0%, #0b1325 55%, #090f1f 100%);
+  }
 
 :global(.dark) .main::before {
-  opacity: 0.32;
-  background:
-    radial-gradient(120% 60% at 110% 20%, rgba(56, 189, 184, 0.24) 0%, rgba(56, 189, 184, 0) 70%),
-    radial-gradient(90% 45% at -10% 10%, rgba(22, 163, 190, 0.24) 0%, rgba(22, 163, 190, 0) 80%),
-    radial-gradient(70% 35% at 50% 95%, rgba(14, 165, 233, 0.18) 0%, rgba(14, 165, 233, 0) 70%);
-}
+    opacity: 0.32;
+    background:
+      radial-gradient(120% 60% at 110% 20%, rgba(56, 189, 184, 0.24) 0%, rgba(56, 189, 184, 0) 70%),
+      radial-gradient(90% 45% at -10% 10%, rgba(22, 163, 190, 0.24) 0%, rgba(22, 163, 190, 0) 80%),
+      radial-gradient(70% 35% at 50% 95%, rgba(14, 165, 233, 0.18) 0%, rgba(14, 165, 233, 0) 70%);
+  }
 
 :global(.dark) .container,
 :global(.dark) .heading,
 :global(.dark) .subheading {
-  color: #e2e8f0;
-}
+    color: #e2e8f0;
+  }
 
 :global(.dark) .card,
 :global(.dark) .commentCard,
 :global(.dark) .auditItem {
-  background: rgba(15, 23, 42, 0.92);
-  border-color: rgba(148, 163, 184, 0.22);
-  box-shadow: 0 22px 48px rgba(2, 6, 23, 0.55);
-}
+    background: rgba(15, 23, 42, 0.92);
+    border-color: rgba(148, 163, 184, 0.22);
+    box-shadow: 0 22px 48px rgba(2, 6, 23, 0.55);
+  }
 
 :global(.dark) .subheading,
 :global(.dark) .commentMeta,
 :global(.dark) .auditMeta,
 :global(.dark) .rowTitle span:last-of-type {
-  color: #cbd5f5;
-}
+    color: #cbd5f5;
+  }
 
 :global(.dark) .tableRow:nth-child(even) {
-  background: rgba(30, 41, 59, 0.72);
-}
+    background: rgba(30, 41, 59, 0.72);
+  }
 
 :global(.dark) .tableRow {
-  background: rgba(15, 23, 42, 0.82);
+    background: rgba(15, 23, 42, 0.82);
   color: #e2e8f0;
 }
 
@@ -835,12 +835,12 @@
 :global(.dark) .tableRowActive {
   background: rgba(56, 189, 248, 0.24);
   outline-color: rgba(56, 189, 248, 0.5);
-}
+  }
 
 :global(.dark) .tableHeaderRow {
-  background: rgba(86, 193, 176, 0.26);
-  color: #f8fafc;
-}
+    background: rgba(86, 193, 176, 0.26);
+    color: #f8fafc;
+  }
 
 :global(.dark) .slidesTable {
   background: rgba(14, 26, 36, 0.85);
@@ -848,18 +848,18 @@
 }
 
 :global(.dark) .ghostButton {
-  background: rgba(71, 85, 105, 0.4);
-  color: #f8fafc;
-}
+    background: rgba(71, 85, 105, 0.4);
+    color: #f8fafc;
+  }
 
 :global(.dark) .ghostButton:hover {
-  background: rgba(148, 163, 184, 0.4);
-}
+    background: rgba(148, 163, 184, 0.4);
+  }
 
 :global(.dark) .outlineButton {
-  color: #56c1b0;
-  border-color: rgba(86, 193, 176, 0.6);
-}
+    color: #56c1b0;
+    border-color: rgba(86, 193, 176, 0.6);
+  }
 
 :global(.dark) .outlineButton:hover {
   background: rgba(56, 189, 248, 0.15);
@@ -893,24 +893,24 @@
 }
 
 :global(.dark) .chatBox {
-  background: rgba(15, 23, 42, 0.92);
-  border-color: rgba(148, 163, 184, 0.22);
-  box-shadow: 0 26px 52px rgba(2, 6, 23, 0.6);
-}
+    background: rgba(15, 23, 42, 0.92);
+    border-color: rgba(148, 163, 184, 0.22);
+    box-shadow: 0 26px 52px rgba(2, 6, 23, 0.6);
+  }
 
 :global(.dark) .chatMessages {
-  background: rgba(30, 41, 59, 0.85);
-}
+    background: rgba(30, 41, 59, 0.85);
+  }
 
 :global(.dark) .chatMessage {
-  background: rgba(15, 23, 42, 0.82);
-  border-color: rgba(148, 163, 184, 0.2);
+    background: rgba(15, 23, 42, 0.82);
+    border-color: rgba(148, 163, 184, 0.2);
   color: #e2e8f0;
-}
+  }
 
 :global(.dark) .chatTimestamp {
-  color: #cbd5f5;
-}
+    color: #cbd5f5;
+  }
 
 :global(.dark) .chatComposer textarea {
   background: rgba(15, 23, 42, 0.85);
@@ -919,17 +919,17 @@
 }
 
 :global(.dark) .chatToggleButton {
-  background: linear-gradient(135deg, #3ca48f 0%, #1f6f5f 100%);
-  box-shadow: 0 20px 40px rgba(8, 15, 35, 0.6);
-}
+    background: linear-gradient(135deg, #3ca48f 0%, #1f6f5f 100%);
+    box-shadow: 0 20px 40px rgba(8, 15, 35, 0.6);
+  }
 
 :global(.dark) .chatBadge {
-  border-color: #0f172a;
-}
+    border-color: #0f172a;
+  }
 
 :global(.dark) .footer {
-  color: #cbd5f5;
-}
+    color: #cbd5f5;
+  }
 
 .commentInfo {
   margin: 0;

@@ -24,6 +24,8 @@ import { logAuditEvent } from "@/lib/audit";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/hooks/useTheme";
 import TeamChatWidget from "@/components/TeamChatWidget";
+import SmartAssistantPanel from "@/components/SmartAssistantPanel";
+import type { SlideContent, PresentationContext } from "@/services/smartAssistantService";
 import styles from "./editor.module.css";
 import EditorToolbar from "@/components/EditorToolbar";
 import {
@@ -273,6 +275,7 @@ export default function EditorPage({ params }: { params: { id: string } }) {
   const [newCollaboratorValue, setNewCollaboratorValue] = useState("");
   const [teamModalError, setTeamModalError] = useState<string | null>(null);
   const [isUpdatingTeam, setIsUpdatingTeam] = useState(false);
+  const [showAssistant, setShowAssistant] = useState(false);
   const storageKey = useMemo(() => `presentation-${params.id}-slides`, [params.id]);
   const storedUserRecord = useMemo(
     () => (user && typeof user === "object" ? (user as Record<string, unknown>) : null),
@@ -310,6 +313,93 @@ export default function EditorPage({ params }: { params: { id: string } }) {
   const isFirstSlide = currentSlideIndex <= 0;
   const isLastSlide = currentSlideIndex === slides.length - 1;
   const canDeleteSlide = slides.length > 1;
+
+  // Smart Assistant: Build SlideContent for current slide
+  const assistantCurrentSlide: SlideContent | null = useMemo(() => {
+    if (!selectedSlide) return null;
+
+    try {
+      // Get decrypted content (already decrypted when loaded from Firestore)
+      const slideContent = selectedSlide.content || selectedSlide.subtitle || "";
+      const slideNotes = selectedSlide.notes || "";
+
+      // Try to infer language from content (simple heuristic: check for Arabic characters)
+      const hasArabicChars = /[\u0600-\u06FF]/.test(slideContent || selectedSlide.title || "");
+      const inferredLanguage: "en" | "ar" = hasArabicChars ? "ar" : "en";
+
+      return {
+        id: selectedSlide.id,
+        title: selectedSlide.title || "Untitled slide",
+        content: slideContent,
+        notes: slideNotes,
+        language: inferredLanguage,
+      };
+    } catch (error) {
+      console.warn("Error building assistant slide content:", error);
+      return null;
+    }
+  }, [selectedSlide]);
+
+  // Smart Assistant: Build SlideContent[] for all slides
+  const assistantAllSlides: SlideContent[] = useMemo(() => {
+    if (!slides || slides.length === 0) {
+      return assistantCurrentSlide ? [assistantCurrentSlide] : [];
+    }
+
+    try {
+      return slides.map((slide) => {
+        const slideContent = slide.content || slide.subtitle || "";
+        const slideNotes = slide.notes || "";
+        
+        // Infer language from content
+        const hasArabicChars = /[\u0600-\u06FF]/.test(slideContent || slide.title || "");
+        const inferredLanguage: "en" | "ar" = hasArabicChars ? "ar" : "en";
+
+        return {
+          id: slide.id,
+          title: slide.title || "Untitled slide",
+          content: slideContent,
+          notes: slideNotes,
+          language: inferredLanguage,
+        };
+      });
+    } catch (error) {
+      console.warn("Error building assistant all slides:", error);
+      return assistantCurrentSlide ? [assistantCurrentSlide] : [];
+    }
+  }, [slides, assistantCurrentSlide]);
+
+  // Smart Assistant: Build PresentationContext
+  const assistantPresentationContext: PresentationContext = useMemo(() => {
+    try {
+      // Infer language from slides content
+      const allText = slides.map(s => (s.content || s.subtitle || s.title || "")).join(" ");
+      const hasArabicChars = /[\u0600-\u06FF]/.test(allText || presentationTitle || "");
+      const inferredLanguage: "en" | "ar" = hasArabicChars ? "ar" : "en";
+
+      return {
+        id: presentationId || params.id,
+        title: presentationTitle || "Untitled presentation",
+        totalSlides: slides.length,
+        language: inferredLanguage,
+        // goal and audience could be added if stored in presentation metadata
+        // For now, leave them undefined
+      };
+    } catch (error) {
+      console.warn("Error building assistant presentation context:", error);
+      return {
+        id: presentationId || params.id,
+        title: presentationTitle || "Untitled presentation",
+        totalSlides: slides.length,
+        language: "en",
+      };
+    }
+  }, [presentationId, params.id, presentationTitle, slides]);
+
+  // Smart Assistant: UI Language detection
+  const uiLanguage = assistantPresentationContext.language || "en";
+  const isArabic = uiLanguage === "ar";
+  const assistantLabel = isArabic ? "المساعد الذكي" : "AI Assistant";
 
   // Load presentation and slides from Firestore
   const loadFromFirestore = useCallback(
@@ -423,8 +513,37 @@ export default function EditorPage({ params }: { params: { id: string } }) {
                 : "";
             const rawNotes = typeof data.notes === "string" ? data.notes : "";
 
-            const decryptedContent = rawContent ? decryptText(rawContent) : "";
-            const decryptedNotes = rawNotes ? decryptText(rawNotes) : "";
+            // Safely decrypt content
+            let decryptedContent = "";
+            if (rawContent) {
+              try {
+                decryptedContent = decryptText(rawContent);
+                // If decryption returns empty but we had content, use original
+                if (!decryptedContent && rawContent.trim()) {
+                  decryptedContent = rawContent;
+                }
+              } catch (error) {
+                // If decryption fails, use original content
+                console.warn("Failed to decrypt content, using as-is:", error);
+                decryptedContent = rawContent;
+              }
+            }
+            
+            // Safely decrypt notes
+            let decryptedNotes = "";
+            if (rawNotes) {
+              try {
+                decryptedNotes = decryptText(rawNotes);
+                // If decryption returns empty but we had content, use original
+                if (!decryptedNotes && rawNotes.trim()) {
+                  decryptedNotes = rawNotes;
+                }
+              } catch (error) {
+                // If decryption fails, use original notes
+                console.warn("Failed to decrypt notes, using as-is:", error);
+                decryptedNotes = rawNotes;
+              }
+            }
 
             const finalContent =
               decryptedContent ||
@@ -1181,7 +1300,11 @@ export default function EditorPage({ params }: { params: { id: string } }) {
         const slideIndex = slides.findIndex((s) => s.id === slide.id);
         const slideRef = doc(db, "presentations", presentationId, "slides", slide.id);
         const plainContent =
-          typeof slide.subtitle === "string" ? slide.subtitle : placeholderMap.subtitle;
+          typeof slide.content === "string" && slide.content.trim()
+            ? slide.content
+            : typeof slide.subtitle === "string" && slide.subtitle.trim()
+            ? slide.subtitle
+            : placeholderMap.subtitle;
         const plainNotes = typeof slide.notes === "string" ? slide.notes : "";
         const encryptedContent = encryptText(plainContent);
         const encryptedNotes = encryptText(plainNotes);
@@ -1808,7 +1931,7 @@ export default function EditorPage({ params }: { params: { id: string } }) {
         console.error("Failed to store viewer payload", error);
       }
     }
-    router.push("/viewer");
+      router.push("/viewer");
   };
 
   const toggleColorPicker = () => setIsColorPickerOpen((prev) => !prev);
@@ -1988,8 +2111,8 @@ export default function EditorPage({ params }: { params: { id: string } }) {
       </nav>
 
       <main className={styles.main}>
-        <div className={styles.container}>
-          <div className={styles.editorShell}>
+        <div className={styles.container} style={{ display: "flex", gap: "24px", alignItems: "flex-start" }}>
+          <div className={styles.editorShell} style={{ flex: "1 1 auto", minWidth: 0 }}>
             <header className={styles.editorHeader}>
               <div className={styles.headerRow}>
                 <div className={styles.editorTitleBlock}>
@@ -2086,6 +2209,21 @@ export default function EditorPage({ params }: { params: { id: string } }) {
                   </button>
                   <button type="button" className={styles.slideshowButton} onClick={handleOpenSlideshow}>
                     Slideshow
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowAssistant((prev) => !prev)}
+                    title={assistantLabel}
+                    aria-label={assistantLabel}
+                    className="ml-2 inline-flex items-center justify-center h-9 w-9 rounded-full border border-gray-300 bg-white text-sm shadow-sm hover:bg-emerald-50 hover:border-emerald-400 dark:bg-[#020617] dark:border-gray-700 dark:hover:bg-emerald-900/40 transition-colors"
+                    style={{
+                      backgroundColor: showAssistant ? "#ecfdf5" : undefined,
+                      borderColor: showAssistant ? "#10b981" : undefined,
+                    }}
+                  >
+                    <span className="text-lg" aria-hidden="true">
+                      🤖
+                    </span>
                   </button>
                 </div>
               </div>
@@ -2212,13 +2350,13 @@ export default function EditorPage({ params }: { params: { id: string } }) {
                       <>
                         {/* Title slide: show subtitle */}
                         {selectedSlide?.subtitle && (
-                          <div
-                            ref={subtitleRef}
-                            className={styles.slideSubtitleInput}
+                      <div
+                        ref={subtitleRef}
+                        className={styles.slideSubtitleInput}
                             contentEditable={!isReadOnly}
-                            suppressContentEditableWarning
-                            role="textbox"
-                            aria-label="Slide subtitle"
+                        suppressContentEditableWarning
+                        role="textbox"
+                        aria-label="Slide subtitle"
                             onInput={(e) => {
                               e.preventDefault();
                               handleContentInput("subtitle");
@@ -2430,11 +2568,11 @@ export default function EditorPage({ params }: { params: { id: string } }) {
                             e.preventDefault();
                             handleContentInput("subtitle");
                           }}
-                          onFocus={() => handleContentFocus("subtitle")}
-                          onBlur={() => handleContentBlur("subtitle")}
-                          style={getTextStyle("subtitle")}
+                        onFocus={() => handleContentFocus("subtitle")}
+                        onBlur={() => handleContentBlur("subtitle")}
+                        style={getTextStyle("subtitle")}
                           data-readonly={isReadOnly}
-                        />
+                      />
                       )
                     )}
                     </div>
@@ -2576,11 +2714,97 @@ export default function EditorPage({ params }: { params: { id: string } }) {
                 </div>
               </section>
             </div>
-          </div>
 
           <footer className={styles.footer}>© 2025 Aramco Digital – Secure Presentation Tool</footer>
+          </div>
+
+          {/* Smart Assistant Panel */}
+          {showAssistant && (
+            <aside 
+              className="hidden xl:block"
+              style={{ 
+                width: "360px",
+                minWidth: "320px",
+                maxWidth: "380px",
+                height: "calc(100vh - 120px)",
+                position: "sticky",
+                top: "88px"
+              }}
+            >
+              <SmartAssistantPanel
+                presentationContext={assistantPresentationContext}
+                currentSlide={assistantCurrentSlide}
+                allSlides={assistantAllSlides}
+                onApplyToSlide={(data) => {
+                  if (!selectedSlide) return;
+                  if (data.content !== undefined) {
+                    // Update subtitle (which is what the editor displays) and content
+                    updateSlideField("subtitle", data.content);
+                    updateSlideField("content", data.content);
+                  }
+                  if (data.notes !== undefined) {
+                    updateSlideField("notes", data.notes);
+                  }
+                }}
+              />
+            </aside>
+          )}
+
+          {/* Mobile/Tablet Overlay Panel */}
+          {showAssistant && (
+            <div className="xl:hidden fixed inset-0 bg-black/30 backdrop-blur-sm z-50" onClick={() => setShowAssistant(false)}>
+              <aside 
+                className="fixed top-[72px] right-4 bottom-4 rounded-2xl shadow-xl"
+                style={{ 
+                  width: "min(420px, calc(100% - 32px))"
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="bg-white dark:bg-[#06141f] border border-[#e0edf2] dark:border-[#123049] rounded-2xl h-full flex flex-col relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowAssistant(false)}
+                    className="absolute top-3 right-3 z-10 h-7 w-7 rounded-full bg-[#f3fafc] dark:bg-[#0b2533] hover:bg-[#e5f4f8] dark:hover:bg-[#123049] flex items-center justify-center text-[#5f7b8c] dark:text-[#9fb8c7] transition-colors text-lg"
+                    aria-label={isArabic ? "إغلاق" : "Close"}
+                  >
+                    ×
+                  </button>
+                  <div className="flex-1 overflow-hidden">
+                    <SmartAssistantPanel
+                      presentationContext={assistantPresentationContext}
+                      currentSlide={assistantCurrentSlide}
+                      allSlides={assistantAllSlides}
+                      onApplyToSlide={(data) => {
+                        if (!selectedSlide) return;
+                        if (data.content !== undefined) {
+                          updateSlideField("subtitle", data.content);
+                          updateSlideField("content", data.content);
+                        }
+                        if (data.notes !== undefined) {
+                          updateSlideField("notes", data.notes);
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+              </aside>
+            </div>
+          )}
         </div>
       </main>
+
+      {/* Floating AI Assistant Button */}
+      <button
+        type="button"
+        onClick={() => setShowAssistant(true)}
+        title={assistantLabel}
+        aria-label={assistantLabel}
+        className="fixed bottom-24 right-6 z-50 h-14 w-14 rounded-full shadow-lg bg-[#0A5C50] text-white hover:bg-[#0c7465] transition-colors flex items-center justify-center"
+      >
+        <span className="text-2xl" aria-hidden="true">
+          🤖
+        </span>
+      </button>
 
       {isTeamModalOpen ? (
         <div className={styles.teamModalOverlay} role="dialog" aria-modal="true" aria-labelledby="team-management-title">

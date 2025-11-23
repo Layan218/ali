@@ -23,6 +23,7 @@ type PresentationRow = {
   lastUpdated: string;
   status: "Draft" | "Final";
   comments: number;
+  _updatedAt?: Date | null; // Store Date object for sorting
 };
 
 export default function ExecutiveSummaryPage() {

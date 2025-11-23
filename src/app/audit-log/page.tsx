@@ -194,34 +194,34 @@ export default function AuditLogPage() {
                   No activity logs yet. Actions will appear here as you use the application.
                 </div>
               ) : (
-                <table className={styles.table}>
-                  <thead>
-                    <tr>
-                      <th scope="col" className={styles.tableHeaderCell}>
-                        Date &amp; Time
-                      </th>
-                      <th scope="col" className={styles.tableHeaderCell}>
-                        User
-                      </th>
-                      <th scope="col" className={styles.tableHeaderCell}>
-                        Action
-                      </th>
-                      <th scope="col" className={styles.tableHeaderCell}>
-                        Details
-                      </th>
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th scope="col" className={styles.tableHeaderCell}>
+                      Date &amp; Time
+                    </th>
+                    <th scope="col" className={styles.tableHeaderCell}>
+                      User
+                    </th>
+                    <th scope="col" className={styles.tableHeaderCell}>
+                      Action
+                    </th>
+                    <th scope="col" className={styles.tableHeaderCell}>
+                      Details
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className={styles.tableBody}>
+                  {logEntries.map((entry) => (
+                    <tr key={entry.id} className={styles.tableBodyRow}>
+                      <td className={styles.tableBodyCell}>{entry.timestamp}</td>
+                      <td className={styles.tableBodyCell}>{entry.user}</td>
+                      <td className={styles.tableBodyCell}>{entry.action}</td>
+                      <td className={styles.tableBodyCell}>{entry.details}</td>
                     </tr>
-                  </thead>
-                  <tbody className={styles.tableBody}>
-                    {logEntries.map((entry) => (
-                      <tr key={entry.id} className={styles.tableBodyRow}>
-                        <td className={styles.tableBodyCell}>{entry.timestamp}</td>
-                        <td className={styles.tableBodyCell}>{entry.user}</td>
-                        <td className={styles.tableBodyCell}>{entry.action}</td>
-                        <td className={styles.tableBodyCell}>{entry.details}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                  ))}
+                </tbody>
+              </table>
               )}
             </div>
           </section>

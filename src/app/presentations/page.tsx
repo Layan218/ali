@@ -17,6 +17,7 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import { encryptText } from "@/lib/encryption";
 import { useTheme } from "@/hooks/useTheme";
+import { generatePresentation, type AIPresentationSlide } from "@/services/aiPresentationService";
 
 type TemplateCard = {
   id: string;
@@ -144,8 +145,13 @@ export default function PresentationsHome() {
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
   const [aiTitle, setAITitle] = useState("");
   const [aiDescription, setAIDescription] = useState("");
+  const [aiGoal, setAIGoal] = useState<string>("");
+  const [aiAudience, setAIAudience] = useState<string>("");
+  const [aiTone, setAITone] = useState<"formal" | "friendly" | "technical">("formal");
+  const [aiLanguage, setAILanguage] = useState<"en" | "ar">("en");
   const [aiSlideCount, setAISlideCount] = useState(6);
   const [isAIGenerating, setIsAIGenerating] = useState(false);
+  const [aiProgress, setAIProgress] = useState<string>("");
   const [aiError, setAiError] = useState<string | null>(null);
   const savedPresentations = useMemo(
     () => presentationMeta.filter((item) => item.isSaved),
@@ -207,7 +213,7 @@ export default function PresentationsHome() {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       if (!firebaseUser) {
         router.push("/login");
-      }
+        }
     });
     return () => unsubscribe();
   }, [router]);
@@ -263,442 +269,17 @@ export default function PresentationsHome() {
     setIsAIModalOpen(false);
     setAITitle("");
     setAIDescription("");
+    setAIGoal("");
+    setAIAudience("");
+    setAITone("formal");
+    setAILanguage("en");
     setAISlideCount(6);
     setAiError(null);
+    setAIProgress("");
     setIsAIGenerating(false);
   };
 
-  // Generate slides with clean, accurate, and professionally organized information
-  const generateSlides = async (title: string, description: string, slideCount: number) => {
-    const slides: Array<{ title: string; content: string }> = [];
-    
-    // Fetch real information from web first to create a professional introduction
-    let webData: { sentences: string[]; keyWords: string[]; summary: string; fullContent?: string } | null = null;
-    try {
-      const searchQuery = description.trim() || title;
-      const response = await fetch("/api/web-search", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topic: title, description }),
-      });
-      
-      if (response.ok) {
-        webData = await response.json();
-      }
-    } catch (error) {
-      console.error("Failed to fetch web data:", error);
-    }
-
-    const fetchedSummary = webData?.summary || description;
-    const fetchedSentences = webData?.sentences || [];
-    
-    // Get current user info for author
-    const currentUser = auth.currentUser;
-    const authorName = currentUser?.displayName || currentUser?.email?.split('@')[0] || "Presenter";
-    const currentDate = new Date().toLocaleDateString('en-US', { 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
-    });
-    
-    // Slide 1: Clean title slide only (title, subtitle, author, date)
-    const titleSubtitle = description || "An informative presentation";
-    const titleSlideContent = `${titleSubtitle}\n\n${authorName}\n${currentDate}`;
-    
-    slides.push({
-      title: title || "Untitled Presentation",
-      content: titleSlideContent,
-    });
-
-    if (slideCount <= 1) return slides;
-
-    // Use already fetched webData or fetch if not available
-    if (!webData) {
-      try {
-        const searchQuery = description.trim() || title;
-        const response = await fetch("/api/web-search", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ topic: title, description }),
-        });
-        
-        if (response.ok) {
-          webData = await response.json();
-        }
-      } catch (error) {
-        console.error("Failed to fetch web data:", error);
-      }
-    }
-
-    const summary = webData?.summary || description;
-    const sentences = webData?.sentences || [];
-    const keyWords = webData?.keyWords || [];
-    
-    // Slide 2: Outline slide with 4-6 main sections
-    const outlineSections: string[] = [];
-    
-    // Generate outline sections based on topic and available content
-    const standardSections = [
-      "Overview",
-      "Key Concepts",
-      "Important Aspects",
-      "Applications & Use Cases",
-      "Benefits & Impact",
-      "Conclusion"
-    ];
-    
-    // Try to create topic-specific sections from keyWords and content
-    if (keyWords.length > 0 || summary) {
-      // Use keyWords to create more specific sections
-      const topicWords = title.toLowerCase().split(/\s+/).filter(w => w.length > 3);
-      const mainTopic = topicWords[0] || title.toLowerCase();
-      
-      // Create sections based on available information
-      const customSections: string[] = [];
-      
-      // Always start with Overview
-      customSections.push("Overview");
-      
-      // Add Key Concepts if we have enough content
-      if (sentences.length > 5 || summary) {
-        customSections.push("Key Concepts");
-      }
-      
-      // Add Important Aspects
-      customSections.push("Important Aspects");
-      
-      // Add Applications/Use Cases if we have relevant content
-      if (keyWords.some(kw => ['application', 'use', 'case', 'example', 'implementation'].some(term => kw.includes(term))) || 
-          summary?.toLowerCase().includes('application') ||
-          summary?.toLowerCase().includes('use case')) {
-        customSections.push("Applications & Use Cases");
-      } else {
-        customSections.push("Real-World Applications");
-      }
-      
-      // Add Benefits/Impact
-      if (keyWords.some(kw => ['benefit', 'impact', 'advantage', 'value'].some(term => kw.includes(term))) ||
-          summary?.toLowerCase().includes('benefit') ||
-          summary?.toLowerCase().includes('impact')) {
-        customSections.push("Benefits & Impact");
-      } else {
-        customSections.push("Key Benefits");
-      }
-      
-      // Always end with Conclusion
-      customSections.push("Conclusion");
-      
-      // Use custom sections (4-6 items)
-      outlineSections.push(...customSections.slice(0, 6));
-    } else {
-      // Use standard sections
-      outlineSections.push(...standardSections);
-    }
-    
-    // Format outline as bullet points
-    const outlineContent = outlineSections
-      .map((section, index) => `${index + 1}. ${section}`)
-      .join('\n');
-    
-    slides.push({
-      title: "Outline",
-      content: outlineContent,
-    });
-    
-    // Clean sentences: remove citations, normalize, capitalize, add punctuation
-    const cleanSentences = sentences
-      .map(s => {
-        let cleaned = s.trim()
-          .replace(/\[.*?\]/g, '') // Remove citations
-          .replace(/\(.*?\)/g, '') // Remove parentheticals
-          .replace(/\s+/g, ' ') // Normalize whitespace
-          .trim();
-        
-        if (cleaned.length === 0) return null;
-        
-        // Capitalize first letter
-        if (/^[a-z]/.test(cleaned)) {
-          cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
-        }
-        
-        // Ensure proper punctuation
-        if (!/[.!?]$/.test(cleaned)) {
-          cleaned += '.';
-        }
-        
-        return cleaned;
-      })
-      .filter((s): s is string => s !== null && s.length >= 25 && s.length <= 100)
-      .filter((s, index, arr) => arr.indexOf(s) === index); // Remove duplicates
-    
-    // Create structured slide deck: Overview, Key Concepts, Important Aspects, Applications, Benefits, Conclusion
-    // We already have Title (slide 1) and Outline (slide 2), so remaining slides start from slide 3
-    const contentSlides = slideCount - 2; // Excluding title and outline slides
-    const hasEnoughContent = cleanSentences.length >= contentSlides * 3;
-    
-    // Slide 3: Overview (4-6 bullet points)
-    if (contentSlides >= 1) {
-      const overviewSentences = cleanSentences.slice(0, 6).filter(Boolean);
-      let overviewContent = "";
-      
-      if (overviewSentences.length >= 4) {
-        // Use 4-6 best sentences for overview
-        const pointsToUse = Math.min(overviewSentences.length, 6);
-        overviewContent = overviewSentences
-          .slice(0, pointsToUse)
-          .map(s => `• ${s}`)
-          .join('\n');
-      } else if (summary) {
-        const summaryParts = summary
-          .split(/[.!?]+/)
-          .map(s => s.trim().replace(/\[.*?\]/g, '').replace(/\(.*?\)/g, ''))
-          .filter(s => s.length >= 20 && s.length <= 100)
-          .filter((s, idx, arr) => arr.indexOf(s) === idx) // Remove duplicates
-          .slice(0, 6)
-          .map(s => {
-            let cleaned = s.trim();
-            if (cleaned.length > 0 && /^[a-z]/.test(cleaned)) {
-              cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
-            }
-            if (cleaned.length > 0 && !/[.!?]$/.test(cleaned)) {
-              cleaned += '.';
-            }
-            return cleaned;
-          })
-          .filter(s => s.length > 0);
-        
-        // Ensure at least 4 points
-        if (summaryParts.length >= 4) {
-          overviewContent = summaryParts
-            .slice(0, 6)
-            .map(s => `• ${s}`)
-            .join('\n');
-        } else {
-          // Combine with cleanSentences if available
-          const combined = [...overviewSentences, ...summaryParts]
-            .filter((s, idx, arr) => arr.indexOf(s) === idx)
-            .slice(0, 6);
-          overviewContent = combined.map(s => `• ${s}`).join('\n');
-        }
-      }
-      
-      // Ensure we have at least 4 points
-      const contentLines = overviewContent.split('\n').filter(l => l.trim().length > 0);
-      if (contentLines.length < 4) {
-        const topicWords = title.toLowerCase().split(/\s+/).filter(w => w.length > 3);
-        const mainTopic = topicWords[0] || title.toLowerCase();
-        const fallbackPoints = [
-          `${title} represents a significant and multifaceted topic.`,
-          `Understanding ${mainTopic} requires comprehensive knowledge across multiple domains.`,
-          `Key aspects of ${mainTopic} include various interconnected components and considerations.`,
-          `Effective engagement with ${mainTopic} involves strategic thinking and practical application.`,
-        ];
-        
-        // Combine existing content with fallback
-        const existing = contentLines.map(l => l.replace(/^•\s*/, ''));
-        const needed = 4 - existing.length;
-        const additional = fallbackPoints
-          .filter(p => !existing.some(e => e.toLowerCase().includes(p.toLowerCase().substring(0, 20))))
-          .slice(0, needed);
-        
-        overviewContent = [...existing, ...additional]
-          .filter(Boolean)
-          .map(s => `• ${s}`)
-          .join('\n');
-      }
-      
-      slides.push({
-        title: "Overview",
-        content: overviewContent,
-      });
-    }
-    
-    // Remaining content slides: Key Concepts, Important Aspects, Applications, Benefits, etc.
-    // We need to map outline sections to actual slides
-    const remainingSlides = contentSlides - 1; // Excluding overview
-    
-    if (remainingSlides > 0) {
-      // Ensure we have enough sentences for 4-6 bullet points per slide
-      const sentencesPerSlide = Math.max(4, Math.ceil(cleanSentences.length / remainingSlides));
-      const usedSentences = Math.min(4, cleanSentences.length);
-      
-      for (let i = 0; i < remainingSlides; i++) {
-        const slideIndex = i + 1;
-        const startIdx = usedSentences + (i * sentencesPerSlide);
-        const endIdx = Math.min(startIdx + sentencesPerSlide + 2, cleanSentences.length); // Get extra for selection
-        
-        let slideSentences = cleanSentences.slice(startIdx, endIdx);
-        
-        // If not enough sentences, supplement with summary
-        if (slideSentences.length < 4 && summary) {
-          const summaryParts = summary
-            .split(/[.!?]+/)
-            .map(s => s.trim().replace(/\[.*?\]/g, '').replace(/\(.*?\)/g, ''))
-            .filter(s => s.length >= 20 && s.length <= 100)
-            .filter((s, idx, arr) => arr.indexOf(s) === idx) // Remove duplicates
-            .slice(i * 4, (i + 1) * 4)
-            .map(s => {
-              let cleaned = s.trim();
-              if (cleaned.length > 0 && /^[a-z]/.test(cleaned)) {
-                cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
-              }
-              if (cleaned.length > 0 && !/[.!?]$/.test(cleaned)) {
-                cleaned += '.';
-              }
-              return cleaned;
-            })
-            .filter(s => s.length > 0);
-          
-          // Combine and deduplicate
-          const combined = [...slideSentences, ...summaryParts];
-          slideSentences = combined.filter((s, idx, arr) => arr.indexOf(s) === idx).slice(0, 6);
-        }
-        
-        // Remove duplicates and ensure variety
-        slideSentences = slideSentences.filter((s, idx, arr) => {
-          // Remove exact duplicates
-          if (arr.indexOf(s) !== idx) return false;
-          // Remove very similar sentences (check first 30 chars)
-          const prefix = s.substring(0, 30).toLowerCase();
-          const similar = arr.slice(0, idx).some(other => 
-            other.substring(0, 30).toLowerCase() === prefix
-          );
-          return !similar;
-        });
-        
-        // Create slide title based on outline sections (skip "Overview" and "Conclusion")
-        const outlineSectionTitles = outlineSections.filter(s => s !== "Overview" && s !== "Conclusion");
-        const slideTitle = outlineSectionTitles[Math.min(i, outlineSectionTitles.length - 1)] || 
-                          ["Key Concepts", "Important Aspects", "Applications", "Benefits"][Math.min(i, 3)];
-        
-        // Create content (4-6 bullet points, ensure quality)
-        let slideContent = "";
-        if (slideSentences.length >= 4) {
-          // Use 4-6 best sentences
-          const pointsToUse = Math.min(slideSentences.length, 6);
-          slideContent = slideSentences
-            .slice(0, pointsToUse)
-            .map(s => `• ${s}`)
-            .join('\n');
-        } else if (slideSentences.length > 0) {
-          // Use what we have, but ensure at least 4 points
-          slideContent = slideSentences
-            .map(s => `• ${s}`)
-            .join('\n');
-          
-          // If we have less than 4, try to split longer sentences or add from summary
-          if (slideSentences.length < 4 && summary) {
-            const additionalParts = summary
-              .split(/[.!?]+/)
-              .map(s => s.trim().replace(/\[.*?\]/g, '').replace(/\(.*?\)/g, ''))
-              .filter(s => s.length >= 15 && s.length <= 80)
-              .filter(s => !slideSentences.some(existing => 
-                existing.toLowerCase().includes(s.toLowerCase().substring(0, 20)) ||
-                s.toLowerCase().includes(existing.toLowerCase().substring(0, 20))
-              ))
-              .slice(0, 4 - slideSentences.length)
-              .map(s => {
-                let cleaned = s.trim();
-                if (cleaned.length > 0 && /^[a-z]/.test(cleaned)) {
-                  cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
-                }
-                if (cleaned.length > 0 && !/[.!?]$/.test(cleaned)) {
-                  cleaned += '.';
-                }
-                return cleaned;
-              })
-              .filter(s => s.length > 0);
-            
-            if (additionalParts.length > 0) {
-              slideContent += '\n' + additionalParts.map(s => `• ${s}`).join('\n');
-            }
-          }
-        } else {
-          // Fallback: create topic-specific content
-          const topicWords = title.toLowerCase().split(/\s+/).filter(w => w.length > 3);
-          const mainTopic = topicWords[0] || title.toLowerCase();
-          slideContent = `• ${title} encompasses various important aspects and considerations.\n• Understanding ${mainTopic} requires comprehensive knowledge and research.\n• Key components of ${mainTopic} include multiple interconnected elements.\n• Effective implementation of ${mainTopic} involves strategic planning and execution.`;
-        }
-        
-        slides.push({
-          title: slideTitle,
-          content: slideContent,
-        });
-      }
-    }
-    
-    // Last slide: Conclusion (if we have more than 3 slides: title + outline + content) - 4-6 bullet points
-    if (slides.length >= 4 && contentSlides >= 2) {
-      const conclusionSentences = cleanSentences.slice(-6).filter(Boolean);
-      let conclusionContent = "";
-      
-      if (conclusionSentences.length >= 4) {
-        // Use 4-6 best sentences for conclusion
-        const pointsToUse = Math.min(conclusionSentences.length, 6);
-        conclusionContent = conclusionSentences
-          .slice(0, pointsToUse)
-          .map(s => `• ${s}`)
-          .join('\n');
-      } else if (summary) {
-        const summaryParts = summary
-          .split(/[.!?]+/)
-          .map(s => s.trim().replace(/\[.*?\]/g, '').replace(/\(.*?\)/g, ''))
-          .filter(s => s.length >= 20 && s.length <= 100)
-          .filter((s, idx, arr) => arr.indexOf(s) === idx) // Remove duplicates
-          .slice(-6)
-          .map(s => {
-            let cleaned = s.trim();
-            if (cleaned.length > 0 && /^[a-z]/.test(cleaned)) {
-              cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
-            }
-            if (cleaned.length > 0 && !/[.!?]$/.test(cleaned)) {
-              cleaned += '.';
-            }
-            return cleaned;
-          })
-          .filter(s => s.length > 0);
-        
-        // Combine with conclusionSentences
-        const combined = [...conclusionSentences, ...summaryParts]
-          .filter((s, idx, arr) => arr.indexOf(s) === idx)
-          .slice(0, 6);
-        conclusionContent = combined.map(s => `• ${s}`).join('\n');
-      }
-      
-      // Ensure we have at least 4 points
-      const contentLines = conclusionContent.split('\n').filter(l => l.trim().length > 0);
-      if (contentLines.length < 4) {
-        const topicWords = title.toLowerCase().split(/\s+/).filter(w => w.length > 3);
-        const mainTopic = topicWords[0] || title.toLowerCase();
-        const fallbackPoints = [
-          `Summary of key points and important insights about ${title}.`,
-          `Understanding ${mainTopic} provides valuable perspectives and practical applications.`,
-          `Key takeaways highlight the significance and impact of ${mainTopic}.`,
-          `Future considerations and next steps for further exploration of ${mainTopic}.`,
-        ];
-        
-        // Combine existing content with fallback
-        const existing = contentLines.map(l => l.replace(/^•\s*/, ''));
-        const needed = 4 - existing.length;
-        const additional = fallbackPoints
-          .filter(p => !existing.some(e => e.toLowerCase().includes(p.toLowerCase().substring(0, 20))))
-          .slice(0, needed);
-        
-        conclusionContent = [...existing, ...additional]
-          .filter(Boolean)
-          .map(s => `• ${s}`)
-          .join('\n');
-      }
-      
-      // Replace last slide with conclusion
-      slides[slides.length - 1] = {
-        title: "Conclusion",
-        content: conclusionContent,
-      };
-    }
-
-    return slides;
-  };
+  // Old generateSlides function removed - now using aiPresentationService.generatePresentation()
 
   const handleAIGenerate = async () => {
     if (!aiTitle.trim()) {
@@ -707,6 +288,7 @@ export default function PresentationsHome() {
     }
 
     setAiError(null);
+    setAIProgress("");
     setIsAIGenerating(true);
     const currentUser = auth.currentUser;
     
@@ -718,8 +300,21 @@ export default function PresentationsHome() {
     }
 
     try {
-      // Generate slides with real information
-      const generatedSlides = await generateSlides(aiTitle, aiDescription, aiSlideCount);
+      // Generate slides using the new AI service
+      const generatedSlides = await generatePresentation(
+        {
+          topic: aiTitle,
+          goal: aiGoal || undefined,
+          audience: aiAudience || undefined,
+          tone: aiTone,
+          language: aiLanguage,
+          slideCount: aiSlideCount,
+        },
+        (progress) => {
+          // Update progress indicator
+          setAIProgress(progress.message);
+        }
+      );
 
       if (!generatedSlides || generatedSlides.length === 0) {
         throw new Error("Failed to generate slides");
@@ -743,30 +338,30 @@ export default function PresentationsHome() {
       // Create slides with AI template styling
       let firstSlideId: string | null = null;
       for (let i = 0; i < generatedSlides.length; i++) {
-        const slide = generatedSlides[i];
-        // For title slide, use title as main title and description as subtitle
+        const slide: AIPresentationSlide = generatedSlides[i];
         const isTitleSlide = i === 0;
-        const isOutlineSlide = i === 1;
         const slideTitle = slide.title || "Untitled Slide";
         
-        // Title slide: content contains subtitle, author, date (separated by newlines) - goes to subtitle field
-        // Outline slide: content contains numbered sections - goes to content field
-        // Regular slides: content contains bullet points - goes to content field
+        // Convert bullets array to content string format (bullet points with newlines)
         let slideSubtitle = "";
         let slideContent = "";
         
         if (isTitleSlide) {
-          // Title slide: content contains subtitle, author, date - put in subtitle field
-          slideSubtitle = slide.content || "";
+          // Title slide: use description or audience info as subtitle
+          if (aiDescription.trim()) {
+            slideSubtitle = aiDescription.trim();
+          } else if (aiAudience.trim()) {
+            slideSubtitle = `Presented to ${aiAudience}`;
+          } else {
+            slideSubtitle = "AI Generated Presentation";
+          }
           slideContent = "";
-        } else if (isOutlineSlide) {
-          // Outline slide: content contains numbered sections - put in content field
-          slideSubtitle = "";
-          slideContent = slide.content || "";
         } else {
-          // Regular content slides: content contains bullet points
+          // Content slides: convert bullets array to bullet point string
+          if (slide.bullets && slide.bullets.length > 0) {
+            slideContent = slide.bullets.map(bullet => `• ${bullet}`).join("\n");
+          }
           slideSubtitle = "";
-          slideContent = slide.content || "";
         }
         
         try {
@@ -774,7 +369,7 @@ export default function PresentationsHome() {
           const slideData: any = {
             order: i + 1,
             title: slideTitle,
-            notes: "",
+            notes: slide.notes ? encryptText(slide.notes) : encryptText(""),
             theme: "Aramco Classic", // Default theme for all slides
             templateId: "ai-modern",
             createdAt: serverTimestamp(),
@@ -783,13 +378,10 @@ export default function PresentationsHome() {
 
           // Add subtitle/content based on slide type
           if (isTitleSlide && slideSubtitle) {
-            // Title slide: subtitle contains subtitle, author, date
+            // Title slide: subtitle contains description/audience info
             slideData.subtitle = encryptText(slideSubtitle);
-          } else if (isOutlineSlide && slideContent) {
-            // Outline slide: content contains numbered sections
-            slideData.content = encryptText(slideContent);
-          } else if (!isTitleSlide && !isOutlineSlide && slideContent) {
-            // Regular content slides: content contains bullet points
+          } else if (!isTitleSlide && slideContent) {
+            // Content slides: content contains bullet points
             slideData.content = encryptText(slideContent);
           }
 
@@ -828,6 +420,7 @@ export default function PresentationsHome() {
       setAiError(errorMessage);
     } finally {
       setIsAIGenerating(false);
+      setAIProgress("");
     }
   };
 
@@ -1094,7 +687,7 @@ export default function PresentationsHome() {
                 backgroundColor: "#ffffff",
                 borderRadius: "16px",
                 padding: "32px",
-                maxWidth: "500px",
+                maxWidth: "600px",
                 width: "90%",
                 maxHeight: "90vh",
                 overflowY: "auto",
@@ -1181,7 +774,7 @@ export default function PresentationsHome() {
                   value={aiDescription}
                   onChange={(e) => setAIDescription(e.target.value)}
                   placeholder="Describe what your presentation should be about..."
-                  rows={4}
+                  rows={3}
                   style={{
                     width: "100%",
                     padding: "12px",
@@ -1192,6 +785,147 @@ export default function PresentationsHome() {
                     resize: "vertical",
                   }}
                 />
+              </div>
+
+              <div style={{ marginBottom: "20px" }}>
+                <label
+                  style={{
+                    display: "block",
+                    marginBottom: "8px",
+                    fontSize: "14px",
+                    fontWeight: 500,
+                    color: "#374151",
+                  }}
+                >
+                  Goal / Purpose
+                </label>
+                <select
+                  value={aiGoal}
+                  onChange={(e) => setAIGoal(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "12px",
+                    borderRadius: "8px",
+                    border: "1px solid #d1d5db",
+                    fontSize: "14px",
+                    backgroundColor: "#ffffff",
+                  }}
+                >
+                  <option value="">Select goal (optional)</option>
+                  <option value="Inform">Inform</option>
+                  <option value="Persuade">Persuade</option>
+                  <option value="Train">Train</option>
+                  <option value="Review">Review</option>
+                  <option value="Propose">Propose</option>
+                </select>
+              </div>
+
+              <div style={{ marginBottom: "20px" }}>
+                <label
+                  style={{
+                    display: "block",
+                    marginBottom: "8px",
+                    fontSize: "14px",
+                    fontWeight: 500,
+                    color: "#374151",
+                  }}
+                >
+                  Target Audience
+                </label>
+                <input
+                  type="text"
+                  value={aiAudience}
+                  onChange={(e) => setAIAudience(e.target.value)}
+                  placeholder="e.g., Executives, Team members, Clients"
+                  style={{
+                    width: "100%",
+                    padding: "12px",
+                    borderRadius: "8px",
+                    border: "1px solid #d1d5db",
+                    fontSize: "14px",
+                  }}
+                />
+              </div>
+
+              <div style={{ marginBottom: "20px" }}>
+                <label
+                  style={{
+                    display: "block",
+                    marginBottom: "8px",
+                    fontSize: "14px",
+                    fontWeight: 500,
+                    color: "#374151",
+                  }}
+                >
+                  Tone
+                </label>
+                <div style={{ display: "flex", gap: "12px" }}>
+                  {(["formal", "friendly", "technical"] as const).map((tone) => (
+                    <label
+                      key={tone}
+                      style={{
+                        flex: 1,
+                        padding: "10px",
+                        borderRadius: "8px",
+                        border: `2px solid ${aiTone === tone ? "#56C1B0" : "#d1d5db"}`,
+                        backgroundColor: aiTone === tone ? "#f0fdfa" : "#ffffff",
+                        cursor: "pointer",
+                        textAlign: "center",
+                        fontSize: "14px",
+                        textTransform: "capitalize",
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        value={tone}
+                        checked={aiTone === tone}
+                        onChange={(e) => setAITone(e.target.value as "formal" | "friendly" | "technical")}
+                        style={{ marginRight: "6px" }}
+                      />
+                      {tone}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ marginBottom: "20px" }}>
+                <label
+                  style={{
+                    display: "block",
+                    marginBottom: "8px",
+                    fontSize: "14px",
+                    fontWeight: 500,
+                    color: "#374151",
+                  }}
+                >
+                  Language
+                </label>
+                <div style={{ display: "flex", gap: "12px" }}>
+                  {(["en", "ar"] as const).map((lang) => (
+                    <label
+                      key={lang}
+                      style={{
+                        flex: 1,
+                        padding: "10px",
+                        borderRadius: "8px",
+                        border: `2px solid ${aiLanguage === lang ? "#56C1B0" : "#d1d5db"}`,
+                        backgroundColor: aiLanguage === lang ? "#f0fdfa" : "#ffffff",
+                        cursor: "pointer",
+                        textAlign: "center",
+                        fontSize: "14px",
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        value={lang}
+                        checked={aiLanguage === lang}
+                        onChange={(e) => setAILanguage(e.target.value as "en" | "ar")}
+                        style={{ marginRight: "6px" }}
+                      />
+                      {lang === "en" ? "English" : "Arabic"}
+                    </label>
+                  ))}
+                </div>
               </div>
 
               <div style={{ marginBottom: "24px" }}>
@@ -1224,6 +958,22 @@ export default function PresentationsHome() {
                   Between 1 and 20 slides
                 </p>
               </div>
+
+              {aiProgress && (
+                <div
+                  style={{
+                    marginBottom: "20px",
+                    padding: "12px 16px",
+                    backgroundColor: "#eff6ff",
+                    border: "1px solid #bfdbfe",
+                    borderRadius: "8px",
+                    color: "#1e40af",
+                    fontSize: "14px",
+                  }}
+                >
+                  {aiProgress}
+                </div>
+              )}
 
               <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
                 <button
@@ -1259,7 +1009,7 @@ export default function PresentationsHome() {
                     cursor: isAIGenerating || !aiTitle.trim() ? "not-allowed" : "pointer",
                   }}
                 >
-                  {isAIGenerating ? "Fetching information and generating..." : "Generate Presentation"}
+                  {isAIGenerating ? (aiProgress || "Generating...") : "Generate Presentation"}
                 </button>
               </div>
             </div>
