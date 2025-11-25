@@ -657,6 +657,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   const selectedThemeName = selectedSlide?.theme ?? themes[0]?.name ?? DEFAULT_THEME;
   const activeThemeObj = getThemeByName(selectedThemeName) || presentationThemes["scdt"];
   const activeTheme = activeThemeObj?.id || selectedThemeName; // Use theme ID for comparison
+  const isAITemplate = selectedSlide?.templateId === "ai-modern" || selectedSlide?.templateId?.startsWith("ai-");
   const currentSlideIndex = slides.findIndex((slide) => slide.id === selectedSlideId);
   const isFirstSlide = currentSlideIndex <= 0;
   const isLastSlide = currentSlideIndex === slides.length - 1;
@@ -4082,14 +4083,14 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                     <div className={styles.canvasActionBar}>
                       <button 
                         type="button" 
-                        onClick={() => handleSaveSlide(false)} 
+                        onClick={handleSaveSlide} 
                         className={`${styles.canvasActionButton} ${styles.canvasActionPrimary}`}
                         style={{
                           backgroundColor: activeThemeObj.buttonPrimaryBg,
                           color: activeThemeObj.buttonPrimaryColor,
                         }}
                         onMouseEnter={(e) => {
-                          e.currentTarget.style.backgroundColor = activeThemeObj.buttonPrimaryHover;
+                          e.currentTarget.style.backgroundColor = activeThemeObj.buttonPrimaryHover || activeThemeObj.buttonPrimaryBg;
                         }}
                         onMouseLeave={(e) => {
                           e.currentTarget.style.backgroundColor = activeThemeObj.buttonPrimaryBg;
@@ -4117,7 +4118,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                           color: activeThemeObj.buttonPrimaryColor,
                         }}
                         onMouseEnter={(e) => {
-                          e.currentTarget.style.backgroundColor = activeThemeObj.buttonPrimaryHover;
+                          e.currentTarget.style.backgroundColor = activeThemeObj.buttonPrimaryHover || activeThemeObj.buttonPrimaryBg;
                         }}
                         onMouseLeave={(e) => {
                           e.currentTarget.style.backgroundColor = activeThemeObj.buttonPrimaryBg;
