@@ -115,6 +115,7 @@ type SlideData = {
   content?: string;
   notes: string;
   theme: string;
+  order?: number;
   formatting: SlideFormatting;
   titleStyle?: TitleStyle;
   titlePosition?: TitlePosition;
