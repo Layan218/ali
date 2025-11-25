@@ -468,7 +468,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   const [isBackgroundPickerOpen, setIsBackgroundPickerOpen] = useState(false);
   const [isLayoutPickerOpen, setIsLayoutPickerOpen] = useState(false);
   const [isTransitionPickerOpen, setIsTransitionPickerOpen] = useState(false);
-  const [comments, setComments] = useState<CommentItem[]>(initialComments);
+  const [comments, setComments] = useState<CommentItem[]>([]);
   const [newComment, setNewComment] = useState("");
   const storageKey = useMemo(() => `presentation-${resolvedParams.id}-slides`, [resolvedParams.id]);
   
@@ -2120,7 +2120,6 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     setSlides((prev) =>
       prev.map((slide) => (slide.id === selectedSlideId ? { ...slide, [field]: value } : slide))
     );
->>>>>>> 2401ad3fa80c5a20deebe2d48c88c208a7379fed
   };
 
   // Drag functionality for title, subtitle, and text boxes
@@ -2562,7 +2561,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
       }));
       markPresentationSaved(presentationId, presentationTitle, slideSummary, status);
 
-      // Save slides to Firebase
+      // Save slides to Firebase (legacy function - keeping for compatibility)
       try {
         const slidesToSave = slides.map((slide, index) => ({
           id: slide.id,
@@ -2578,6 +2577,10 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         console.error("Failed to save slides to Firebase:", error);
         // Don't block the UI, but log the error
       }
+    } catch (error) {
+      console.error("Failed to save presentation:", error);
+      setStatusMessage("Failed to save. Please try again.");
+      setStatusToastVariant("draft");
     }
   };
 
@@ -2983,7 +2986,6 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     };
   }, [handleSaveVersion, handleRestoreVersion, versions, isSavingVersion, isRestoringVersion]);
 
->>>>>>> 2401ad3fa80c5a20deebe2d48c88c208a7379fed
   const toolbarDisabled = selectedSlide == null || status === "final";
 
   const highlightIndicatorStyle: CSSProperties =
@@ -3295,8 +3297,6 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
       console.error("Failed to save slides to Firebase:", error);
       alert("Failed to save slides to Firebase. Please try saving manually first.");
     }
-  };
->>>>>>> 2401ad3fa80c5a20deebe2d48c88c208a7379fed
   };
 
   const currentLineHeight =
@@ -3741,7 +3741,11 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                         Save
                       </button>
                       <button type="button" className={`${styles.canvasActionButton} ${styles.canvasActionSecondary}`}>
-=======
+                      </button>
+                    </div>
+                    <div
+                      className={styles.slideCanvas}
+                      style={{
                         background: !isSCDT ? activeThemeObj.slideBackground : undefined,
                         border: activeThemeObj.canvasBorder,
                         boxShadow: activeThemeObj.canvasShadow,
@@ -4106,7 +4110,6 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                           borderColor: activeThemeObj.buttonSecondaryBorder,
                         }}
                       >
->>>>>>> 2401ad3fa80c5a20deebe2d48c88c208a7379fed
                         Share
                       </button>
                   <button
@@ -4236,44 +4239,9 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                           }}
                         >
                           <strong>Live transcript:</strong> {transcript}
-                  </div>
-                      )}
-                  <textarea
-=======
-                        </div>
-                        <div className={styles.notesModeSwitcher}>
-                          <button
-                            className={styles.notesModeButtonActive}
-                            type="button"
-                          >
-                            Private
-                          </button>
-                          <button
-                            type="button"
-                            onClick={handleToggleVoice}
-                            className={
-                              isVoiceRecording
-                                ? styles.notesModeButtonVoiceActive
-                                : styles.notesModeButtonVoice
-                            }
-                          >
-                            <span className={styles.voiceIndicator} />
-                            Voice
-                          </button>
-                        </div>
-                      </header>
-                      {voiceError && (
-                        <div className={styles.voiceRecordingHint} style={{ color: "#d32f2f", backgroundColor: "#ffebee" }}>
-                          {voiceError}
-                        </div>
-                      )}
-                      {isVoiceRecording && !voiceError && (
-                        <div className={styles.voiceRecordingHint}>
-                          Recording… speak and we'll convert your voice into notes.
                         </div>
                       )}
                       <textarea
->>>>>>> 2401ad3fa80c5a20deebe2d48c88c208a7379fed
                         id="speaker-notes"
                     ref={notesRef}
                         className={styles.notesTextarea}
