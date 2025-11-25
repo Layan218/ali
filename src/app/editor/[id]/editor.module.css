@@ -2918,7 +2918,423 @@
 
 :global(.dark) .notesTextarea:focus {
   border-color: rgba(45, 212, 191, 0.6);
-  box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.25);
+}
+
+.notesModeSwitcher {
+  display: inline-flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.notesModeButtonActive {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
+  border-radius: 999px;
+  border: 1px solid #00b388;
+  font-size: 13px;
+  cursor: pointer;
+  background: #00b388;
+  color: #ffffff;
+  font-weight: 500;
+}
+
+.notesModeButtonVoice {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
+  border-radius: 999px;
+  border: 1px solid #56C1B0;
+  font-size: 13px;
+  cursor: pointer;
+  background: rgba(86, 193, 176, 0.14);
+  color: #0e3731;
+  font-weight: 500;
+  transition: all 0.15s ease;
+}
+
+.notesModeButtonVoice:hover:not(:disabled) {
+  background: rgba(86, 193, 176, 0.2);
+}
+
+.notesModeButtonVoice:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.notesModeButtonVoiceActive {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
+  border-radius: 999px;
+  border: 1px solid #00b388;
+  font-size: 13px;
+  cursor: pointer;
+  background: #00b388;
+  color: #ffffff;
+  font-weight: 500;
+  transition: all 0.15s ease;
+}
+
+.voiceIndicator {
+  width: 6px;
+  height: 16px;
+  border-radius: 999px;
+  background: #00b388;
+}
+
+.notesModeButtonVoiceActive .voiceIndicator {
+  background: #ffffff;
+}
+
+.voiceRecordingHint {
+  font-size: 12px;
+  color: #04796a;
+  margin-top: 8px;
+  margin-bottom: 4px;
+  font-style: italic;
+}
+
+:global(.dark) .notesModeButtonVoice {
+  background: rgba(86, 193, 176, 0.14);
+  color: #4ade80;
+  border-color: #56C1B0;
+}
+
+:global(.dark) .notesModeButtonVoice:hover:not(:disabled) {
+  background: rgba(86, 193, 176, 0.2);
+}
+
+:global(.dark) .notesModeButtonVoiceActive {
+  background: #00b388;
+  color: #ffffff;
+  border-color: #00b388;
+}
+
+:global(.dark) .voiceRecordingHint {
+  color: #4ade80;
+}
+
+/* SCDT Theme Styles */
+.scdtCoverSlide {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+  padding: 0 !important;
+  background-color: #020b2b !important;
+}
+
+.scdtCoverSlide::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url("/themes/scdt/ChatGPT Image Nov 24, 2025 at 11_39_11 AM.png");
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.scdtCoverLayout {
+  position: relative;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 80px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: flex-start;
+  color: #ffffff;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  z-index: 1; /* Ensure content is above the background */
+}
+
+.scdtCoverTitleArea {
+  position: relative;
+  z-index: 1;
+  margin-top: 180px; /* Lower position to ensure logos are fully visible */
+  width: auto;
+  max-width: 65%;
+  padding-top: 20px; /* Spacing from top */
+}
+
+.scdtCoverTitle {
+  position: relative;
+  z-index: 1;
+  font-size: clamp(48px, 5vw, 64px);
+  line-height: 1.2;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: 0.02em;
+  margin: 0 0 20px 0;
+  min-height: 1.2em;
+  outline: none;
+  border: none;
+  background: transparent;
+  cursor: text;
+  width: 100%;
+  text-align: left;
+}
+
+.scdtCoverTitle:focus {
+  outline: 2px solid rgba(255, 255, 255, 0.5);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
+.scdtCoverTitle[data-readonly="true"] {
+  cursor: not-allowed;
+}
+
+.scdtCoverSubtitle {
+  position: relative;
+  z-index: 1;
+  font-size: clamp(24px, 3vw, 32px);
+  line-height: 1.4;
+  font-weight: 400;
+  color: #ffffff;
+  margin: 0 0 16px 0;
+  min-height: 1.3em;
+  outline: none;
+  border: none;
+  background: transparent;
+  cursor: text;
+  width: 100%;
+  text-align: left;
+}
+
+.scdtCoverSubtitle:focus {
+  outline: 2px solid rgba(255, 255, 255, 0.5);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
+.scdtCoverSubtitle[data-readonly="true"] {
+  cursor: not-allowed;
+}
+
+.scdtCoverDate {
+  position: relative;
+  z-index: 1;
+  font-size: clamp(16px, 1.5vw, 18px);
+  color: #ffffff;
+  margin-top: 8px;
+  text-align: left;
+}
+
+.scdtContentSlide {
+  background: #ffffff !important;
+  display: flex !important;
+  flex-direction: row !important;
+  padding: 0 !important;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.scdtContentLeft {
+  flex: 0 0 35%;
+  width: 35%;
+  min-width: 340px;
+  max-width: 35%;
+  position: relative;
+  overflow: hidden;
+  background-image: url("/themes/scdt/ChatGPT Image Nov 24, 2025 at 10_11_45 AM.png");
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
+}
+
+
+.scdtContentRight {
+  flex: 1;
+  background-color: #ffffff;
+  padding: 64px 80px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  position: relative;
+  min-width: 0;
+  overflow-y: auto;
+}
+
+.scdtContentRight .slideTitleInput {
+  font-size: clamp(28px, 3vw, 36px);
+  font-weight: 600;
+  color: #1b3a4b;
+  line-height: 1.3;
+  margin-bottom: 32px;
+  text-align: left;
+  width: 100%;
+}
+
+.scdtContentRight .slideSubtitleInput,
+.scdtContentRight .slideContent {
+  font-size: clamp(16px, 1.8vw, 20px);
+  font-weight: 400;
+  color: #1b3a4b;
+  line-height: 1.6;
+  text-align: left;
+  width: 100%;
+}
+
+.scdtEndingSlide {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  padding: 0 !important;
+  overflow: hidden;
+  background-image: url("/themes/scdt/Unknown-1.jpeg");
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
+}
+
+
+.scdtFooter {
+  position: absolute;
+  bottom: 24px;
+  right: 80px;
+  left: auto;
+  text-align: right;
+  font-size: 10px;
+  line-height: 1.4;
+  color: rgba(107, 114, 128, 0.8);
+  font-family: "Inter", system-ui, -apple-system, sans-serif;
+  white-space: nowrap;
+  display: inline-block;
+}
+
+.scdtFooterLine {
+  display: inline;
+  margin: 0;
+}
+
+.scdtFooterLine:not(:last-child)::after {
+  content: "  |  ";
+  margin: 0 2px;
+  color: rgba(156, 163, 175, 0.6);
+}
+
+/* Digital Solutions Theme - Title Slide Layout */
+.digitalSolutionsTitleLayout {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  padding: 80px 80px 72px 80px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  color: #ffffff;
+}
+
+.digitalSolutionsTitleText {
+  margin-top: 40px;
+}
+
+.digitalSolutionsMainTitle {
+  font-size: 64px;
+  line-height: 1.1;
+  font-weight: 600;
+  color: #4cff7c; /* neon green similar to reference */
+  letter-spacing: 0.04em;
+  margin: 0 0 16px 0;
+  min-height: 1.2em;
+  outline: none;
+  border: none;
+  background: transparent;
+  cursor: text;
+}
+
+.digitalSolutionsMainTitle:focus {
+  outline: 2px solid rgba(76, 255, 124, 0.5);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
+.digitalSolutionsMainTitle[data-readonly="true"] {
+  cursor: not-allowed;
+}
+
+.digitalSolutionsSubtitle {
+  font-size: 28px;
+  line-height: 1.3;
+  font-weight: 400;
+  color: #ffffff;
+  margin: 0;
+  min-height: 1.3em;
+  outline: none;
+  border: none;
+  background: transparent;
+  cursor: text;
+}
+
+.digitalSolutionsSubtitle:focus {
+  outline: 2px solid rgba(255, 255, 255, 0.5);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
+.digitalSolutionsSubtitle[data-readonly="true"] {
+  cursor: not-allowed;
+}
+
+.digitalSolutionsDateWrapper {
+  margin-bottom: 8px;
+}
+
+.digitalSolutionsDate {
+  font-size: 20px;
+  text-decoration: underline;
+  color: #ffffff;
+}
+
+/* Digital Solutions Theme - Logo */
+.digitalSolutionsLogo {
+  position: absolute;
+  top: 24px;
+  right: 32px;
+  max-height: 56px;
+  width: auto;
+  object-fit: contain;
+  z-index: 5;
+}
+
+/* Digital Solutions Theme - Footer */
+.digitalSolutionsFooter {
+  position: absolute;
+  bottom: 24px;
+  left: 40px;
+  right: 40px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #4b5563; /* dark gray for white slides */
+  pointer-events: none;
+  z-index: 5;
+}
+
+.digitalSolutionsFooter .footerLeft {
+  text-align: left;
+  white-space: nowrap;
+}
+
+.digitalSolutionsFooter .footerCenter {
+  text-align: center;
+  flex: 1;
+  margin-left: 16px;
 }
 
 .toolbarSectionGrow {

@@ -117,18 +117,6 @@ export default function Home() {
               Sign in
           </button>
           ) : null}
-          {!loading && user ? (
-          <button
-            type="button"
-            className={styles.secondary}
-              onClick={async () => {
-                await signOut(auth);
-                router.push("/login");
-              }}
-          >
-              Sign out
-          </button>
-          ) : null}
         </div>
       </nav>
 
@@ -139,13 +127,18 @@ export default function Home() {
           <p className={styles.description}>
             You can create and present secure, professional presentations directly in your browser — exclusively for Aramco Digital.
           </p>
-          {!loading && !user ? (
-          <div className={styles.actions}>
-            <button type="button" className={styles.primary} onClick={() => router.push("/login")}>
+          <div className={styles.heroActions}>
+            <a href="/login" className={styles.primaryButton}>
               Sign in
-            </button>
+            </a>
           </div>
-          ) : null}
+          {!loading && !user && (
+            <div className={styles.actions}>
+              <button type="button" className={styles.primary} onClick={() => router.push("/login")}>
+                Sign in
+              </button>
+            </div>
+          )}
         </div>
       </main>
 

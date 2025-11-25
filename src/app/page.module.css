@@ -173,6 +173,29 @@
   font-weight: 400;
 }
 
+.heroActions {
+  margin-top: 24px;
+  display: flex;
+  justify-content: center;
+}
+
+.primaryButton {
+  padding: 10px 28px;
+  border-radius: 999px;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  background: #00b388;
+  color: #ffffff;
+  text-decoration: none;
+  box-shadow: 0 10px 30px rgba(0, 179, 136, 0.25);
+}
+
+.primaryButton:hover {
+  opacity: 0.95;
+}
+
 .actions {
   display: inline-flex;
   gap: 16px;

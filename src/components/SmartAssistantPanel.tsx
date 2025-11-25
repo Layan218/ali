@@ -9,12 +9,14 @@ import {
   type SlideHelpResult,
   type PresentationAnalysisResult,
 } from "@/services/smartAssistantService";
+import styles from "./SmartAssistantPanel.module.css";
 
 interface SmartAssistantPanelProps {
   presentationContext: PresentationContext;
   currentSlide?: SlideContent | null;
   allSlides?: SlideContent[];
   onApplyToSlide?: (data: { content?: string; notes?: string }) => void;
+  onClose?: () => void;
 }
 
 // Helper function to strip HTML tags and return plain text
@@ -61,6 +63,7 @@ export default function SmartAssistantPanel({
   currentSlide,
   allSlides = [],
   onApplyToSlide,
+  onClose,
 }: SmartAssistantPanelProps) {
   const [activeTab, setActiveTab] = useState<"slide" | "presentation">("slide");
 
@@ -93,13 +96,19 @@ export default function SmartAssistantPanel({
   const textAlign = isArabic ? "text-right" : "text-left";
 
   return (
-    <div 
-      className={`h-full w-full flex flex-col gap-3 bg-white dark:bg-[#020817] rounded-2xl border border-gray-200 dark:border-white/10 shadow-sm p-4 overflow-hidden ${textAlign}`}
-      dir={dir}
-    >
+    <div className={styles.aiAssistantPopup}>
+      {onClose && (
+        <button className={styles.aiAssistantClose} onClick={onClose}>
+          ×
+        </button>
+      )}
+      <div 
+        className={`w-full flex flex-col bg-transparent overflow-hidden ${textAlign}`}
+        dir={dir}
+      >
       {/* Header */}
-      <div className="flex flex-col gap-2">
-        <h3 className="text-sm font-semibold text-gray-900 dark:text-[#f4f9fb]">
+      <div className="flex flex-col gap-3 pb-4 flex-shrink-0 border-b border-gray-200 dark:border-gray-700">
+        <h3 className={styles.aiAssistantHeader}>
           {isArabic ? "المساعد الذكي بالذكاء الاصطناعي" : "AI Smart Assistant"}
         </h3>
         
@@ -135,7 +144,7 @@ export default function SmartAssistantPanel({
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto -mx-1 px-1">
+      <div className="flex-1 overflow-y-auto min-h-0 pt-4">
         {activeTab === "slide" ? (
           <SlideHelpView
             slideAnalysis={slideAnalysis}
@@ -149,6 +158,7 @@ export default function SmartAssistantPanel({
             isArabic={isArabic}
           />
         )}
+      </div>
       </div>
     </div>
   );
@@ -212,90 +222,91 @@ function SlideHelpView({
   };
 
   return (
-    <div className={`space-y-3 ${textAlign}`}>
+    <div className={`space-y-5 ${textAlign}`}>
       {/* Improved Bullets */}
       {slideAnalysis.improvedBullets.length > 0 && (
-        <div className="bg-gray-50/60 dark:bg-white/[0.02] rounded-xl border border-gray-200 dark:border-gray-700 px-3 py-2 space-y-1">
-          <div className={`flex items-center justify-between gap-2 ${flexDirection}`}>
-            <h4 className="text-xs font-semibold text-gray-900 dark:text-gray-100">
-              {isArabic ? "نقاط محسّنة" : "Improved Bullets"}
-            </h4>
-            {onApplyToSlide && (
-              <button
-                onClick={handleApplyBullets}
-                className="text-xs px-2 py-0.5 rounded-full border border-emerald-500 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500 hover:text-white transition whitespace-nowrap"
-              >
-                {isArabic ? "تطبيق" : "Apply to Slide"}
-              </button>
-            )}
-          </div>
-          <ul className={`list-disc space-y-1 text-sm leading-relaxed text-gray-700 dark:text-gray-300 ${isArabic ? "mr-4" : "ml-4"}`}>
+        <div className={styles.aiAssistantSection}>
+          <h4 className={styles.aiAssistantSectionTitle}>
+            {isArabic ? "نقاط محسّنة" : "Improved Bullets"}
+          </h4>
+          <ul className={`${styles.aiAssistantText} list-none space-y-2 ${isArabic ? "pr-0" : "pl-0"}`}>
             {slideAnalysis.improvedBullets.map((bullet, index) => (
-              <li key={index}>
-                {stripHtml(bullet)}
+              <li key={index} className="flex items-start gap-2.5">
+                <span className="text-emerald-500 mt-0.5 flex-shrink-0">•</span>
+                <span>{stripHtml(bullet)}</span>
               </li>
             ))}
           </ul>
+          {onApplyToSlide && (
+            <div className={styles.aiAssistantActions}>
+              <button
+                onClick={handleApplyBullets}
+                className={styles.aiAssistantButton}
+              >
+                {isArabic ? "تطبيق" : "Apply to Slide"}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
       {/* Rewritten Paragraph */}
       {slideAnalysis.rewrittenParagraph && (
-        <div className="bg-gray-50/60 dark:bg-white/[0.02] rounded-xl border border-gray-200 dark:border-gray-700 px-3 py-2 space-y-1">
-          <div className={`flex items-center justify-between gap-2 ${flexDirection}`}>
-            <h4 className="text-xs font-semibold text-gray-900 dark:text-gray-100">
-              {isArabic ? "فقرة محسّنة" : "Rewritten Paragraph"}
-            </h4>
-            {onApplyToSlide && (
+        <div className={styles.aiAssistantSection}>
+          <h4 className={styles.aiAssistantSectionTitle}>
+            {isArabic ? "فقرة محسّنة" : "Rewritten Paragraph"}
+          </h4>
+          <p className={`${styles.aiAssistantText} whitespace-pre-line`}>
+            {stripHtml(slideAnalysis.rewrittenParagraph)}
+          </p>
+          {onApplyToSlide && (
+            <div className={styles.aiAssistantActions}>
               <button
                 onClick={handleApplyParagraph}
-                className="text-xs px-2 py-0.5 rounded-full border border-emerald-500 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500 hover:text-white transition whitespace-nowrap"
+                className={styles.aiAssistantButton}
               >
                 {isArabic ? "تطبيق" : "Apply to Slide"}
               </button>
-            )}
-          </div>
-          <p className="text-sm leading-relaxed text-gray-700 dark:text-gray-300 whitespace-pre-line">
-            {stripHtml(slideAnalysis.rewrittenParagraph)}
-          </p>
+            </div>
+          )}
         </div>
       )}
 
       {/* Speaker Notes */}
       {slideAnalysis.speakerNotes && (
-        <div className="bg-gray-50/60 dark:bg-white/[0.02] rounded-xl border border-gray-200 dark:border-gray-700 px-3 py-2 space-y-1">
-          <div className={`flex items-center justify-between gap-2 ${flexDirection}`}>
-            <h4 className="text-xs font-semibold text-gray-900 dark:text-gray-100">
-              {isArabic ? "ملاحظات المتحدث" : "Speaker Notes"}
-            </h4>
-            {onApplyToSlide && (
+        <div className={styles.aiAssistantSection}>
+          <h4 className={styles.aiAssistantSectionTitle}>
+            {isArabic ? "ملاحظات المتحدث" : "Speaker Notes"}
+          </h4>
+          <p className={`${styles.aiAssistantText} whitespace-pre-line`}>
+            {stripHtml(slideAnalysis.speakerNotes)}
+          </p>
+          {onApplyToSlide && (
+            <div className={styles.aiAssistantActions}>
               <button
                 onClick={handleApplyNotes}
-                className="text-xs px-2 py-0.5 rounded-full border border-emerald-500 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500 hover:text-white transition whitespace-nowrap"
+                className={styles.aiAssistantButton}
               >
                 {isArabic ? "تطبيق كملاحظات" : "Apply as Notes"}
               </button>
-            )}
-          </div>
-          <p className="text-sm leading-relaxed text-gray-700 dark:text-gray-300 whitespace-pre-line">
-            {stripHtml(slideAnalysis.speakerNotes)}
-          </p>
+            </div>
+          )}
         </div>
       )}
 
       {/* Suggestions */}
       {slideAnalysis.suggestions.length > 0 && (
-        <div className="bg-gray-50/60 dark:bg-white/[0.02] rounded-xl border border-gray-200 dark:border-gray-700 px-3 py-2 space-y-1">
-          <h4 className="text-xs font-semibold text-gray-900 dark:text-gray-100">
+        <div className={styles.aiAssistantSection}>
+          <h4 className={styles.aiAssistantSectionTitle}>
             {isArabic ? "اقتراحات" : "Suggestions"}
           </h4>
-          <ul className={`space-y-1.5 ${isArabic ? "mr-4" : "ml-4"}`}>
+          <ul className={`${styles.aiAssistantText} space-y-2 ${isArabic ? "pr-0" : "pl-0"}`}>
             {slideAnalysis.suggestions.map((suggestion, index) => (
               <li
                 key={index}
-                className={`text-sm leading-relaxed text-gray-700 dark:text-gray-300 flex items-start gap-2 ${flexDirection}`}
+                className={`flex items-start gap-2.5 ${flexDirection}`}
               >
-                <span className="text-emerald-500 mt-0.5">•</span>
+                <span className="text-emerald-500 mt-0.5 flex-shrink-0">•</span>
                 <span>{stripHtml(suggestion)}</span>
               </li>
             ))}
@@ -336,11 +347,11 @@ function PresentationHelpView({
   };
 
   return (
-    <div className={`space-y-3 ${textAlign}`}>
+    <div className={`space-y-5 ${textAlign}`}>
       {/* Quality Score */}
-      <div className="bg-gray-50/60 dark:bg-white/[0.02] rounded-xl border border-gray-200 dark:border-gray-700 px-3 py-2 space-y-1">
-        <div className={`flex items-center justify-between ${flexDirection}`}>
-          <h4 className="text-xs font-semibold text-gray-900 dark:text-gray-100">
+      <div>
+        <div className={`flex items-center justify-between mb-3 ${flexDirection}`}>
+          <h4 className="text-xs font-bold text-gray-900 dark:text-gray-100">
             {isArabic ? "درجة الجودة" : "Quality Score"}
           </h4>
           <span className={`text-base font-bold ${
@@ -353,9 +364,9 @@ function PresentationHelpView({
             {presentationAnalysis.estimatedQualityScore}/100
           </span>
         </div>
-        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+        <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-2.5">
           <div
-            className={`h-2 rounded-full transition-all ${getQualityColor(presentationAnalysis.estimatedQualityScore)}`}
+            className={`h-2.5 rounded-full transition-all ${getQualityColor(presentationAnalysis.estimatedQualityScore)}`}
             style={{ width: `${presentationAnalysis.estimatedQualityScore}%` }}
           />
         </div>
@@ -363,11 +374,11 @@ function PresentationHelpView({
 
       {/* Summary */}
       {presentationAnalysis.summary && (
-        <div className="bg-gray-50/60 dark:bg-white/[0.02] rounded-xl border border-gray-200 dark:border-gray-700 px-3 py-2 space-y-1">
-          <h4 className="text-xs font-semibold text-gray-900 dark:text-gray-100">
+        <div className={styles.aiAssistantSection}>
+          <h4 className={styles.aiAssistantSectionTitle}>
             {isArabic ? "ملخص" : "Summary"}
           </h4>
-          <p className="text-sm leading-relaxed text-gray-700 dark:text-gray-300 whitespace-pre-line">
+          <p className={`${styles.aiAssistantText} whitespace-pre-line`}>
             {stripHtml(presentationAnalysis.summary)}
           </p>
         </div>
@@ -375,14 +386,15 @@ function PresentationHelpView({
 
       {/* Key Points */}
       {presentationAnalysis.keyPoints.length > 0 && (
-        <div className="bg-gray-50/60 dark:bg-white/[0.02] rounded-xl border border-gray-200 dark:border-gray-700 px-3 py-2 space-y-1">
-          <h4 className="text-xs font-semibold text-gray-900 dark:text-gray-100">
+        <div className={styles.aiAssistantSection}>
+          <h4 className={styles.aiAssistantSectionTitle}>
             {isArabic ? "النقاط الرئيسية" : "Key Points"}
           </h4>
-          <ul className={`list-disc space-y-1 text-sm leading-relaxed text-gray-700 dark:text-gray-300 ${isArabic ? "mr-4" : "ml-4"}`}>
+          <ul className={`${styles.aiAssistantText} list-none space-y-2 ${isArabic ? "pr-0" : "pl-0"}`}>
             {presentationAnalysis.keyPoints.map((point, index) => (
-              <li key={index}>
-                {stripHtml(point)}
+              <li key={index} className="flex items-start gap-2.5">
+                <span className="text-emerald-500 mt-0.5 flex-shrink-0">•</span>
+                <span>{stripHtml(point)}</span>
               </li>
             ))}
           </ul>
@@ -390,20 +402,20 @@ function PresentationHelpView({
       )}
 
       {/* Strengths and Weaknesses */}
-      <div className="grid grid-cols-1 gap-3">
+      <div className="space-y-5">
         {/* Strengths */}
         {presentationAnalysis.strengths.length > 0 && (
-          <div className="bg-gray-50/60 dark:bg-white/[0.02] rounded-xl border border-gray-200 dark:border-gray-700 px-3 py-2 space-y-1">
-            <h4 className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+          <div className={styles.aiAssistantSection}>
+            <h4 className={styles.aiAssistantSectionTitle}>
               {isArabic ? "نقاط القوة" : "Strengths"}
             </h4>
-            <ul className={`space-y-1.5 ${isArabic ? "mr-4" : "ml-4"}`}>
+            <ul className={`${styles.aiAssistantText} space-y-2 ${isArabic ? "pr-0" : "pl-0"}`}>
               {presentationAnalysis.strengths.map((strength, index) => (
                 <li
                   key={index}
-                  className={`text-sm leading-relaxed text-gray-700 dark:text-gray-300 flex items-start gap-2 ${flexDirection}`}
+                  className={`flex items-start gap-2.5 ${flexDirection}`}
                 >
-                  <span className="text-emerald-500 mt-0.5">✓</span>
+                  <span className="text-emerald-500 mt-0.5 flex-shrink-0">✓</span>
                   <span>{stripHtml(strength)}</span>
                 </li>
               ))}
@@ -413,17 +425,17 @@ function PresentationHelpView({
 
         {/* Weaknesses */}
         {presentationAnalysis.weaknesses.length > 0 && (
-          <div className="bg-gray-50/60 dark:bg-white/[0.02] rounded-xl border border-gray-200 dark:border-gray-700 px-3 py-2 space-y-1">
-            <h4 className="text-xs font-semibold text-red-600 dark:text-red-400">
+          <div className={styles.aiAssistantSection}>
+            <h4 className={styles.aiAssistantSectionTitle}>
               {isArabic ? "نقاط الضعف" : "Weaknesses"}
             </h4>
-            <ul className={`space-y-1.5 ${isArabic ? "mr-4" : "ml-4"}`}>
+            <ul className={`${styles.aiAssistantText} space-y-2 ${isArabic ? "pr-0" : "pl-0"}`}>
               {presentationAnalysis.weaknesses.map((weakness, index) => (
                 <li
                   key={index}
-                  className={`text-sm leading-relaxed text-gray-700 dark:text-gray-300 flex items-start gap-2 ${flexDirection}`}
+                  className={`flex items-start gap-2.5 ${flexDirection}`}
                 >
-                  <span className="text-red-500 mt-0.5">!</span>
+                  <span className="text-red-500 mt-0.5 flex-shrink-0">!</span>
                   <span>{stripHtml(weakness)}</span>
                 </li>
               ))}
@@ -434,17 +446,17 @@ function PresentationHelpView({
 
       {/* Recommendations */}
       {presentationAnalysis.recommendations.length > 0 && (
-        <div className="bg-gray-50/60 dark:bg-white/[0.02] rounded-xl border border-gray-200 dark:border-gray-700 px-3 py-2 space-y-1">
-          <h4 className="text-xs font-semibold text-gray-900 dark:text-gray-100">
+        <div className={styles.aiAssistantSection}>
+          <h4 className={styles.aiAssistantSectionTitle}>
             {isArabic ? "التوصيات" : "Recommendations"}
           </h4>
-          <ul className={`space-y-1.5 ${isArabic ? "mr-4" : "ml-4"}`}>
+          <ul className={`${styles.aiAssistantText} space-y-2 ${isArabic ? "pr-0" : "pl-0"}`}>
             {presentationAnalysis.recommendations.map((recommendation, index) => (
               <li
                 key={index}
-                className={`text-sm leading-relaxed text-gray-700 dark:text-gray-300 flex items-start gap-2 ${flexDirection}`}
+                className={`flex items-start gap-2.5 ${flexDirection}`}
               >
-                <span className="text-emerald-500 mt-0.5">→</span>
+                <span className="text-emerald-500 mt-0.5 flex-shrink-0">→</span>
                 <span>{stripHtml(recommendation)}</span>
               </li>
             ))}

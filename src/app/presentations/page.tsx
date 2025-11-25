@@ -300,24 +300,47 @@ export default function PresentationsHome() {
     }
 
     try {
-      // Generate slides using the new AI service
-      const generatedSlides = await generatePresentation(
-        {
-          topic: aiTitle,
-          goal: aiGoal || undefined,
-          audience: aiAudience || undefined,
-          tone: aiTone,
-          language: aiLanguage,
-          slideCount: aiSlideCount,
-        },
-        (progress) => {
-          // Update progress indicator
-          setAIProgress(progress.message);
-        }
-      );
+      // Generate slides using the new AI service with timeout protection
+      let generatedSlides: AIPresentationSlide[] = [];
+      
+      try {
+        // Set a timeout to prevent hanging
+        const generationPromise = generatePresentation(
+          {
+            topic: aiTitle,
+            goal: aiGoal || undefined,
+            audience: aiAudience || undefined,
+            tone: aiTone,
+            language: aiLanguage,
+            slideCount: aiSlideCount,
+          },
+          (progress) => {
+            // Update progress indicator
+            setAIProgress(progress.message);
+          }
+        );
+
+        // Add timeout protection (30 seconds max)
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error("Generation timeout")), 30000);
+        });
+
+        generatedSlides = await Promise.race([generationPromise, timeoutPromise]);
+      } catch (genError) {
+        console.warn("AI generation failed or timed out, using fallback:", genError);
+        // Fallback: generate simple slides locally
+        generatedSlides = generateLocalFallbackSlides(aiTitle, aiGoal, aiAudience, aiTone, aiLanguage, aiSlideCount);
+        setAIProgress("Using local fallback generator...");
+      }
 
       if (!generatedSlides || generatedSlides.length === 0) {
-        throw new Error("Failed to generate slides");
+        // Final fallback: create at least one slide
+        generatedSlides = [{
+          title: aiTitle,
+          bullets: ["Overview", "Key points", "Summary"],
+          notes: "",
+          layout: "title-bullets",
+        }];
       }
 
       // Create presentation with AI template and default theme
@@ -327,8 +350,8 @@ export default function PresentationsHome() {
         title: aiTitle,
         template: "AI Generated",
         templateId: "ai-modern", // Mark as using AI template
-        theme: "Aramco Classic", // Default theme
-        themeId: "aramco-classic",
+        theme: "Digital Solutions – Black", // Default theme
+        themeId: "digital_solutions_black",
         isShared: false, // Private by default, user can share later
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -370,7 +393,7 @@ export default function PresentationsHome() {
             order: i + 1,
             title: slideTitle,
             notes: slide.notes ? encryptText(slide.notes) : encryptText(""),
-            theme: "Aramco Classic", // Default theme for all slides
+            theme: "Digital Solutions – Black", // Default theme for all slides
             templateId: "ai-modern",
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
@@ -410,18 +433,82 @@ export default function PresentationsHome() {
         },
       });
 
+      // Close modal before navigation
       closeAIModal();
-      // Navigate to editor with the first slide ID
-      const slideIdParam = firstSlideId ? `&slideId=${encodeURIComponent(firstSlideId)}` : "";
-      router.push(`/editor?presentationId=${encodeURIComponent(presentationId)}${slideIdParam}`);
+      
+      // Navigate to editor using the correct route format
+      const slideId = firstSlideId || "slide-1";
+      router.push(`/editor/${encodeURIComponent(presentationId)}?slideId=${encodeURIComponent(slideId)}`);
     } catch (error) {
       console.error("Failed to create AI presentation", error);
       const errorMessage = error instanceof Error ? error.message : "Failed to create presentation. Please try again.";
       setAiError(errorMessage);
-    } finally {
       setIsAIGenerating(false);
       setAIProgress("");
     }
+  };
+
+  // Local fallback generator for when AI service fails
+  const generateLocalFallbackSlides = (
+    title: string,
+    goal?: string,
+    audience?: string,
+    tone: "formal" | "friendly" | "technical" = "formal",
+    language: "en" | "ar" = "en",
+    slideCount: number = 6
+  ): AIPresentationSlide[] => {
+    const slides: AIPresentationSlide[] = [];
+    const count = Math.max(1, Math.min(20, slideCount));
+
+    // Title slide
+    slides.push({
+      title: title,
+      bullets: audience ? [`Presented to ${audience}`] : [],
+      notes: "",
+      layout: "title-only",
+    });
+
+    if (count <= 1) return slides;
+
+    // Introduction slide
+    slides.push({
+      title: language === "en" ? "Overview" : "نظرة عامة",
+      bullets: [
+        `Introduction to ${title}`,
+        goal ? `Goal: ${goal}` : "Key objectives",
+        "Main topics to be covered",
+      ],
+      notes: "",
+      layout: "title-bullets",
+    });
+
+    if (count <= 2) return slides;
+
+    // Content slides
+    const contentTitles = [
+      language === "en" ? "Key Points" : "النقاط الرئيسية",
+      language === "en" ? "Details" : "التفاصيل",
+      language === "en" ? "Analysis" : "التحليل",
+      language === "en" ? "Recommendations" : "التوصيات",
+      language === "en" ? "Next Steps" : "الخطوات التالية",
+    ];
+
+    for (let i = 2; i < count; i++) {
+      const titleIndex = (i - 2) % contentTitles.length;
+      slides.push({
+        title: contentTitles[titleIndex],
+        bullets: [
+          `Point 1 related to ${title}`,
+          `Point 2 related to ${title}`,
+          `Point 3 related to ${title}`,
+          `Point 4 related to ${title}`,
+        ],
+        notes: "",
+        layout: "title-bullets",
+      });
+    }
+
+    return slides;
   };
 
   async function createPresentation(templateName: string) {
@@ -466,7 +553,7 @@ export default function PresentationsHome() {
         },
       });
 
-      router.push(`/editor?presentationId=${encodeURIComponent(presentationId)}&slideId=slide-1`);
+      router.push(`/editor/${encodeURIComponent(presentationId)}?presentationId=${encodeURIComponent(presentationId)}&slideId=slide-1`);
     } catch (error) {
       console.error("Failed to create presentation", error);
     }
@@ -622,7 +709,7 @@ export default function PresentationsHome() {
                     } else if (template.id === "template-ai") {
                       handleAIClick(event);
                     } else {
-                      goToPresentation(template.id);
+                      void createPresentation(template.title);
                     }
                   }}
                 >

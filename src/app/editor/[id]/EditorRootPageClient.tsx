@@ -179,6 +179,27 @@ const themes: ThemeOption[] = [
 
 const INITIAL_THEME = themes[0]?.name ?? DEFAULT_THEME;
 
+const initialComments: CommentItem[] = [
+  {
+    id: "comment-1",
+    author: "Maya Al-Hassan",
+    message: "Consider adding a data visualization on slide 2 for the revenue breakdown.",
+    timestamp: "10:24 AM",
+  },
+  {
+    id: "comment-2",
+    author: "Omar Khalid",
+    message: "Slide 1 title looks great in teal — let's keep that consistent throughout.",
+    timestamp: "11:03 AM",
+  },
+  {
+    id: "comment-3",
+    author: "Layla Nassar",
+    message: "Add a transition note for the executive summary slide.",
+    timestamp: "12:47 PM",
+  },
+];
+
 function formatTitleFromId(id: string) {
   if (!id) return "Untitled presentation";
   return id
@@ -239,7 +260,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
   const [isHighlightPickerOpen, setIsHighlightPickerOpen] = useState(false);
   const [isThemePickerOpen, setIsThemePickerOpen] = useState(false);
-  const [comments, setComments] = useState<CommentItem[]>([]);
+  const [comments, setComments] = useState<CommentItem[]>(initialComments);
   const [newComment, setNewComment] = useState("");
   const [isLoadingFromFirestore, setIsLoadingFromFirestore] = useState(false);
   const [hasLoadedFromFirestore, setHasLoadedFromFirestore] = useState(false);
@@ -260,7 +281,6 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   const [showAssistant, setShowAssistant] = useState(false);
   const [speakerNotes, setSpeakerNotes] = useState<string>("");
   const [isVoiceRecording, setIsVoiceRecording] = useState(false);
-  const [voiceError, setVoiceError] = useState<string | null>(null);
   const recognitionRef = useRef<any>(null);
   const storageKey = useMemo(() => `presentation-${resolvedParams.id}-slides`, [resolvedParams.id]);
   const storedUserRecord = useMemo(
@@ -562,13 +582,27 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         setSlides(loadedSlides);
         
         // Set selected slide based on slideId from URL or first slide
-        // Do NOT update URL here to avoid infinite loops - URL will be updated by the useEffect below
         const urlSlideId = explicitSlideId ?? searchParams.get("slideId");
         if (urlSlideId && loadedSlides.some((s) => s.id === urlSlideId)) {
           setSelectedSlideId(urlSlideId);
+          if (explicitSlideId && urlSlideId !== searchParams.get("slideId")) {
+            router.replace(
+              `/editor?presentationId=${encodeURIComponent(presentationId)}&slideId=${encodeURIComponent(urlSlideId)}`
+            );
+          }
         } else if (loadedSlides.length > 0) {
           const fallbackId = loadedSlides[0].id;
           setSelectedSlideId(fallbackId);
+          if (!explicitSlideId && urlSlideId && !loadedSlides.some((s) => s.id === urlSlideId)) {
+            router.replace(
+              `/editor?presentationId=${encodeURIComponent(presentationId)}&slideId=${encodeURIComponent(fallbackId)}`
+            );
+          }
+          if (explicitSlideId) {
+            router.replace(
+              `/editor?presentationId=${encodeURIComponent(presentationId)}&slideId=${encodeURIComponent(fallbackId)}`
+            );
+          }
         }
       } else {
         // No slides found, create a default one
@@ -591,7 +625,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
       setIsLoadingFromFirestore(false);
     }
   },
-  [presentationId, hasLoadedFromFirestore, router]
+  [presentationId, hasLoadedFromFirestore, searchParams, router]
 );
 
   // Theme is managed by useTheme hook - no need for separate useEffect
@@ -604,15 +638,14 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   }, [presentationId, hasLoadedFromFirestore, isLoadingFromFirestore, loadFromFirestore]);
 
   // Update URL when selectedSlideId changes (for Firestore mode)
-  // This is the ONLY place that updates the slideId in the URL
   useEffect(() => {
     if (presentationId && hasLoadedFromFirestore && selectedSlideId) {
       const currentSlideId = searchParams.get("slideId");
       if (currentSlideId !== selectedSlideId) {
-        router.replace(`/editor/${encodeURIComponent(presentationId)}?slideId=${encodeURIComponent(selectedSlideId)}`);
+        router.replace(`/editor?presentationId=${encodeURIComponent(presentationId)}&slideId=${encodeURIComponent(selectedSlideId)}`);
       }
     }
-  }, [selectedSlideId, presentationId, hasLoadedFromFirestore, router]);
+  }, [selectedSlideId, presentationId, hasLoadedFromFirestore, searchParams, router]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
@@ -630,16 +663,13 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   }, [presentationId]);
 
   // Update selected slide when URL slideId changes (for browser back/forward)
-  // Use useMemo to get the actual slideId value to avoid triggering on searchParams reference changes
-  const urlSlideId = useMemo(() => searchParams.get("slideId"), [searchParams]);
-  
   useEffect(() => {
-    if (!presentationId || !hasLoadedFromFirestore || !urlSlideId) return;
-    // Only update if the URL slideId is different and exists in slides
-    if (urlSlideId !== selectedSlideId && slides.some((s) => s.id === urlSlideId)) {
+    if (!presentationId || !hasLoadedFromFirestore) return;
+    const urlSlideId = searchParams.get("slideId");
+    if (urlSlideId && urlSlideId !== selectedSlideId && slides.some((s) => s.id === urlSlideId)) {
       setSelectedSlideId(urlSlideId);
     }
-  }, [urlSlideId, presentationId, hasLoadedFromFirestore, slides, selectedSlideId]);
+  }, [searchParams, presentationId, hasLoadedFromFirestore, slides, selectedSlideId]);
 
   // Fallback to localStorage if no presentationId (legacy mode)
   useEffect(() => {
@@ -676,10 +706,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
 
   // Subscribe to Firestore comments
   useEffect(() => {
-    if (!presentationId) {
-      setComments([]);
-      return;
-    }
+    if (!presentationId) return;
 
     const commentsRef = collection(db, "presentations", presentationId, "comments");
     const commentsQuery = query(commentsRef, orderBy("createdAt", "asc"));
@@ -1044,19 +1071,12 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
 
     const SpeechRecognition =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    
-    const isChrome = /Chrome/.test(navigator.userAgent) && /Google Inc/.test(navigator.vendor);
 
-    // Check browser support - only Chrome supports SpeechRecognition reliably
-    if (!SpeechRecognition || !isChrome) {
-      setVoiceError("Voice notes are only supported in Google Chrome.");
-      setIsVoiceRecording(false);
+    if (!SpeechRecognition) {
+      console.warn("SpeechRecognition not supported in this browser.");
       recognitionRef.current = null;
       return;
     }
-
-    // Clear any previous error if we have support
-    setVoiceError(null);
 
     const recognition = new SpeechRecognition();
     recognition.lang = "en-US";
@@ -1081,19 +1101,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     };
 
     recognition.onerror = (event: any) => {
-      // Handle speech recognition errors gracefully
-      const errorType = event?.error || "unknown";
-      const errorMessage = event?.message || "";
-      
-      // Only log meaningful errors (not empty objects or common non-critical errors)
-      if (errorType !== "no-speech" && errorType !== "aborted") {
-        if (errorMessage) {
-          console.warn("Speech recognition error:", errorType, errorMessage);
-        } else if (errorType !== "unknown") {
-          console.warn("Speech recognition error:", errorType);
-        }
-      }
-      
+      console.error("Speech recognition error:", event);
       setIsVoiceRecording(false);
     };
 
@@ -1112,14 +1120,9 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   }, []);
 
   const handleToggleVoice = () => {
-    // Check for browser support error first
-    if (voiceError) {
-      return; // Don't attempt to start if browser doesn't support it
-    }
-
     const recognition = recognitionRef.current;
     if (!recognition) {
-      setVoiceError("Voice notes are only supported in Google Chrome.");
+      alert("Voice notes are supported in Chrome desktop. Please use Chrome to record voice notes.");
       return;
     }
 
@@ -1133,8 +1136,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         recognition.start();
         setIsVoiceRecording(true);
       } catch (err) {
-        console.warn("Error starting recognition:", err);
-        setIsVoiceRecording(false);
+        console.error("Error starting recognition:", err);
       }
     }
   };
@@ -1339,7 +1341,9 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
 
       setSlides((prev) => [...prev, newSlide].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)));
       setSelectedSlideId(newSlideId);
-      // URL will be updated by the useEffect that watches selectedSlideId
+      router.push(
+        `/editor?presentationId=${encodeURIComponent(presentationId)}&slideId=${encodeURIComponent(newSlideId)}`
+      );
     } catch (error) {
       console.error("Failed to add slide to Firestore:", error);
     }
@@ -1582,7 +1586,9 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
 
     setSlides((prev) => prev.filter((slide) => slide.id !== slideIdToDelete));
     setSelectedSlideId(nextSlide.id);
-    // URL will be updated by the useEffect that watches selectedSlideId
+    router.push(
+      `/editor?presentationId=${encodeURIComponent(presentationId)}&slideId=${encodeURIComponent(nextSlide.id)}`
+    );
   };
 
   const moveSlide = (direction: "up" | "down") => {
@@ -1911,8 +1917,9 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         );
 
         if (firstSlideId) {
-          setSelectedSlideId(firstSlideId);
-          // URL will be updated by the useEffect that watches selectedSlideId
+          router.replace(
+            `/editor?presentationId=${encodeURIComponent(presentationId)}&slideId=${encodeURIComponent(firstSlideId)}`
+          );
         }
 
         setHasLoadedFromFirestore(false);
@@ -2870,12 +2877,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                           </button>
                         </div>
                       </header>
-                      {voiceError && (
-                        <div className={styles.voiceRecordingHint} style={{ color: "#d32f2f", backgroundColor: "#ffebee" }}>
-                          {voiceError}
-                        </div>
-                      )}
-                      {isVoiceRecording && !voiceError && (
+                      {isVoiceRecording && (
                         <div className={styles.voiceRecordingHint}>
                           Recording… speak and we'll convert your voice into notes.
                         </div>
@@ -2908,21 +2910,15 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                       <span className={styles.badge}>Team</span>
                     </header>
                     <div className={styles.commentsList}>
-                      {comments.length === 0 ? (
-                        <div className={styles.commentCard} style={{ textAlign: "center", padding: "2rem", color: "#64748b" }}>
-                          <p>No comments yet. Start the discussion with your team.</p>
-                        </div>
-                      ) : (
-                        comments.map((comment) => (
-                          <div key={comment.id} className={styles.commentCard}>
-                            <div className={styles.commentMeta}>
-                              <span>{comment.author}</span>
-                              <span>{comment.timestamp}</span>
-                            </div>
-                            <p className="mt-3 text-slate-700 leading-relaxed">{comment.message}</p>
+                      {comments.map((comment) => (
+                        <div key={comment.id} className={styles.commentCard}>
+                          <div className={styles.commentMeta}>
+                            <span>{comment.author}</span>
+                            <span>{comment.timestamp}</span>
                           </div>
-                        ))
-                      )}
+                          <p className="mt-3 text-slate-700 leading-relaxed">{comment.message}</p>
+                        </div>
+                      ))}
                     </div>
                     <form className={styles.commentForm} onSubmit={handleCommentSubmit}>
                       <label htmlFor="new-comment" className="text-sm font-medium text-slate-700">
