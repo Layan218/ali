@@ -112,6 +112,7 @@ type SlideData = {
   id: string;
   title: string;
   subtitle: string;
+  content?: string;
   notes: string;
   theme: string;
   formatting: SlideFormatting;
@@ -2113,14 +2114,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     }
   };
 
-  const applyUndo = () => execWithCommand("undo");
-  const applyRedo = () => execWithCommand("redo");
-
-  const updateSlideField = (field: keyof SlideData, value: string | "cover" | "content" | "ending") => {
-    setSlides((prev) =>
-      prev.map((slide) => (slide.id === selectedSlideId ? { ...slide, [field]: value } : slide))
-    );
-  };
+  // applyUndo and applyRedo are defined earlier in the file
 
   // Drag functionality for title, subtitle, and text boxes
   const dragStartRef = useRef<{ x: number; y: number; startX: number; startY: number; field: "title" | "subtitle" | "textbox"; textBoxId?: string } | null>(null);
