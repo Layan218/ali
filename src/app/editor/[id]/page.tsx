@@ -2480,7 +2480,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     return () => window.clearTimeout(timeoutId);
   }, [statusMessage]);
 
-  const handleSaveSlide = async () => {
+  const handleSaveSlide = async (shouldShare: boolean = false) => {
     syncActiveFieldContent("title");
     syncActiveFieldContent("subtitle");
     if (notesRef.current) {
@@ -2513,7 +2513,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
       // Set ownerId and isShared flag
       if (currentUser) {
         presentationData.ownerId = currentUser.uid;
-        presentationData.isShared = false; // Mark as private by default for regular saves
+        presentationData.isShared = shouldShare; // Mark as shared if shouldShare is true
       }
 
       await setDoc(presentationRef, presentationData, { merge: true });
@@ -4090,17 +4090,17 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                           color: activeThemeObj.buttonPrimaryColor,
                         }}
                         onMouseEnter={(e) => {
-                          e.currentTarget.style.backgroundColor = activeThemeObj.buttonPrimaryHover || activeThemeObj.buttonPrimaryBg;
+                          e.currentTarget.style.backgroundColor = activeThemeObj.buttonPrimaryHover || activeThemeObj.buttonPrimaryBg || "#56c1b0";
                         }}
                         onMouseLeave={(e) => {
-                          e.currentTarget.style.backgroundColor = activeThemeObj.buttonPrimaryBg;
+                          e.currentTarget.style.backgroundColor = activeThemeObj.buttonPrimaryBg || "#56c1b0";
                         }}
                       >
                         Save
                       </button>
                       <button 
                         type="button" 
-                        onClick={handleShare}
+                        onClick={() => handleSaveSlide(true)}
                         className={`${styles.canvasActionButton} ${styles.canvasActionSecondary}`}
                         style={{
                           backgroundColor: activeThemeObj.buttonSecondaryBg,
@@ -4118,10 +4118,10 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                           color: activeThemeObj.buttonPrimaryColor,
                         }}
                         onMouseEnter={(e) => {
-                          e.currentTarget.style.backgroundColor = activeThemeObj.buttonPrimaryHover || activeThemeObj.buttonPrimaryBg;
+                          e.currentTarget.style.backgroundColor = activeThemeObj.buttonPrimaryHover || activeThemeObj.buttonPrimaryBg || "#56c1b0";
                         }}
                         onMouseLeave={(e) => {
-                          e.currentTarget.style.backgroundColor = activeThemeObj.buttonPrimaryBg;
+                          e.currentTarget.style.backgroundColor = activeThemeObj.buttonPrimaryBg || "#56c1b0";
                         }}
                         className={`${styles.canvasActionButton} ${styles.canvasActionSecondary}`}
                   >
