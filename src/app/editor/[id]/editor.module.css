@@ -206,7 +206,8 @@
 }
 
 .shareButton,
-.slideshowButton {
+.slideshowButton,
+.autoPresentationButton {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -224,7 +225,8 @@
 }
 
 .shareButton:hover,
-.slideshowButton:hover {
+.slideshowButton:hover,
+.autoPresentationButton:hover {
   background: rgba(86, 193, 176, 0.14);
   border-color: rgba(86, 193, 176, 0.45);
   box-shadow: 0 6px 16px rgba(86, 193, 176, 0.18);
@@ -239,6 +241,18 @@
 
 .shareButton:hover {
   background: #4bb29f;
+}
+
+.autoPresentationButton {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-color: #667eea;
+  color: #ffffff;
+  box-shadow: 0 10px 24px rgba(102, 126, 234, 0.28);
+}
+
+.autoPresentationButton:hover {
+  background: linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%);
+  border-color: #5a6fd8;
 }
 
 .editorTitleBlock {
@@ -2823,6 +2837,232 @@
   animation: marquee 10s linear infinite;
   white-space: nowrap;
   overflow: hidden;
+}
+
+/* Presentation Mode Slide Transitions */
+.slideFadeIn {
+  animation: slideFadeIn 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes slideFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(30px) scale(0.96);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+/* Fade out for slide transitions */
+.slideFadeOut {
+  animation: slideFadeOut 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes slideFadeOut {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.98);
+    filter: blur(2px);
+  }
+}
+
+/* Presentation Mode Shell - Clean Background */
+.presentationModeShell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(135deg, #f8fafc 0%, #ffffff 50%, #f1f5f9 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+.presentationModeShell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: 
+    radial-gradient(circle at 20% 30%, rgba(86, 193, 176, 0.08) 0%, transparent 50%),
+    radial-gradient(circle at 80% 70%, rgba(59, 130, 246, 0.06) 0%, transparent 50%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.presentationModeHeader {
+  position: relative;
+  z-index: 10;
+  padding: 20px 32px;
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.presentationModeBackLink {
+  color: #475569;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  transition: color 0.2s;
+}
+
+.presentationModeBackLink:hover {
+  color: #56c1b0;
+}
+
+.presentationModeMeta {
+  display: flex;
+  gap: 16px;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.presentationModeActions {
+  display: flex;
+  gap: 12px;
+}
+
+.presentationModeButton {
+  padding: 8px 16px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #475569;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.presentationModeButton:hover:not(:disabled) {
+  background: rgba(86, 193, 176, 0.1);
+  border-color: #56c1b0;
+  color: #0f766e;
+}
+
+.presentationModeButton:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.presentationModeMain {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 32px;
+  position: relative;
+  z-index: 1;
+  min-height: calc(100vh - 100px);
+}
+
+.presentationModeEmpty {
+  text-align: center;
+  color: #64748b;
+  font-size: 16px;
+  padding: 48px;
+}
+
+.presentationModeSlide {
+  transition: opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1), transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 70vh;
+  padding: 64px 80px;
+  text-align: center;
+  max-width: 1200px;
+  width: 100%;
+  margin: 0 auto;
+  position: relative;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px);
+  border-radius: 32px;
+  box-shadow: 
+    0 20px 60px rgba(0, 0, 0, 0.08),
+    0 0 0 1px rgba(255, 255, 255, 0.5);
+}
+
+.presentationModeTitle {
+  font-size: clamp(40px, 5.5vw, 64px);
+  font-weight: 700;
+  margin-bottom: 40px;
+  color: #0f172a;
+  line-height: 1.2;
+  max-width: 85%;
+  letter-spacing: -0.02em;
+}
+
+/* Hide placeholder text during auto-presentation */
+.presentationModeTitle:empty {
+  display: none;
+}
+
+.presentationModeContent {
+  font-size: clamp(22px, 2.8vw, 32px);
+  line-height: 1.9;
+  color: #334155;
+  max-width: 80%;
+  margin: 0 auto;
+  font-weight: 400;
+}
+
+/* Hide placeholder text */
+.presentationModeContent:empty,
+.presentationModeContent p:empty {
+  display: none;
+}
+
+.presentationModeContent p {
+  margin: 16px 0;
+}
+
+.presentationModeContent ul,
+.presentationModeContent ol {
+  text-align: left;
+  display: inline-block;
+  margin: 20px 0;
+}
+
+.presentationModeContent li {
+  margin: 12px 0;
+  padding-left: 8px;
+}
+
+.presentationModeNotes {
+  margin-top: 40px;
+  padding: 24px;
+  background: rgba(86, 193, 176, 0.08);
+  border-radius: 12px;
+  border-left: 4px solid #56c1b0;
+  max-width: 80%;
+}
+
+.presentationModeNotes h2 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #0f766e;
+  margin-bottom: 12px;
+}
+
+.presentationModeNotes p {
+  font-size: 16px;
+  color: #475569;
+  line-height: 1.6;
+  margin: 0;
 }
 
 /* Animation Panel */

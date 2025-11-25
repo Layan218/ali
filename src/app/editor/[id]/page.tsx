@@ -18,6 +18,7 @@ import {
   readPresentationMeta,
   updatePresentationStatus,
 } from "@/lib/presentationMeta";
+import { saveSlidesToFirebase } from "@/lib/saveSlidesToFirebase";
 
 const VIEWER_RETURN_KEY = "viewer-return-url";
 const VIEWER_STATE_KEY = "viewer-state";
@@ -48,6 +49,44 @@ type TitleAnimation = {
   type: "none" | "fade-in" | "slide-in" | "marquee";
   duration: number; // in seconds
   loop: boolean;
+};
+
+type SubtitleStyle = {
+  fontFamily: string;
+  fontSize: number;
+  color: string;
+  bold: boolean;
+  italic: boolean;
+  letterSpacing: number;
+};
+
+type SubtitlePosition = {
+  x: number;
+  y: number;
+  zIndex: number;
+};
+
+type TextBoxStyle = {
+  fontFamily: string;
+  fontSize: number;
+  color: string;
+  bold: boolean;
+  italic: boolean;
+  letterSpacing: number;
+};
+
+type TextBoxPosition = {
+  x: number;
+  y: number;
+  zIndex: number;
+};
+
+type TextBox = {
+  id: string;
+  text?: string;
+  content?: string;
+  style: TextBoxStyle;
+  position: TextBoxPosition;
 };
 
 type SlideData = {
@@ -167,6 +206,7 @@ const placeholderMap: Record<FieldKey, string> = {
   title: "Click to add title",
   subtitle: "Click to add subtitle",
   notes: "",
+  textbox: "Click to add text",
 };
 
 const DEFAULT_THEME = "Aramco Classic";
@@ -175,6 +215,7 @@ const DEFAULT_FORMATTING: SlideFormatting = {
   title: { lineHeight: 1.2 },
   subtitle: { lineHeight: 1.3 },
   notes: { lineHeight: 1.4 },
+  textbox: { lineHeight: 1.5 },
 };
 
 const DEFAULT_TITLE_STYLE: TitleStyle = {
@@ -232,12 +273,14 @@ const createDefaultFormatting = (): SlideFormatting => ({
   title: { lineHeight: DEFAULT_FORMATTING.title.lineHeight },
   subtitle: { lineHeight: DEFAULT_FORMATTING.subtitle.lineHeight },
   notes: { lineHeight: DEFAULT_FORMATTING.notes.lineHeight },
+  textbox: { lineHeight: DEFAULT_FORMATTING.textbox.lineHeight },
 });
 
 const ensureFormatting = (formatting?: SlideFormatting): SlideFormatting => ({
   title: { lineHeight: formatting?.title?.lineHeight ?? DEFAULT_FORMATTING.title.lineHeight },
   subtitle: { lineHeight: formatting?.subtitle?.lineHeight ?? DEFAULT_FORMATTING.subtitle.lineHeight },
   notes: { lineHeight: formatting?.notes?.lineHeight ?? DEFAULT_FORMATTING.notes.lineHeight },
+  textbox: { lineHeight: formatting?.textbox?.lineHeight ?? DEFAULT_FORMATTING.textbox.lineHeight },
 });
 
 const ensureTitleStyle = (style?: TitleStyle): TitleStyle => ({
@@ -295,6 +338,7 @@ const fieldKeyMap: Record<FieldKey, keyof SlideData> = {
   title: "title",
   subtitle: "subtitle",
   notes: "notes",
+  textbox: "textBoxes",
 };
 
 const themes: ThemeOption[] = [
@@ -417,7 +461,7 @@ export default function EditorPage({ params }: { params: { id: string } }) {
   // Voice-to-text state
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState("");
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const recognitionRef = useRef<any | null>(null);
 
   const colorButtonRef = useRef<HTMLDivElement | null>(null);
   const highlightButtonRef = useRef<HTMLDivElement | null>(null);
@@ -735,8 +779,9 @@ export default function EditorPage({ params }: { params: { id: string } }) {
           // Only update content if not actively editing
           if (document.activeElement !== textBoxRef) {
             const currentContent = textBoxRef.innerHTML;
-            if (currentContent !== textBox.content) {
-              textBoxRef.innerHTML = textBox.content;
+            const textBoxContent = textBox.content || textBox.text || "";
+            if (currentContent !== textBoxContent) {
+              textBoxRef.innerHTML = textBoxContent;
             }
           }
           // Always update styles and position
@@ -1752,7 +1797,7 @@ export default function EditorPage({ params }: { params: { id: string } }) {
     return () => window.clearTimeout(timeoutId);
   }, [statusMessage]);
 
-  const handleSaveSlide = () => {
+  const handleSaveSlide = async () => {
     syncActiveFieldContent("title");
     syncActiveFieldContent("subtitle");
     if (notesRef.current) {
@@ -1766,6 +1811,23 @@ export default function EditorPage({ params }: { params: { id: string } }) {
         notes: typeof slide.notes === "string" ? slide.notes : "",
       }));
       markPresentationSaved(presentationId, presentationTitle, slideSummary, status);
+
+      // Save slides to Firebase
+      try {
+        const slidesToSave = slides.map((slide, index) => ({
+          id: slide.id,
+          title: typeof slide.title === "string" ? slide.title : "",
+          subtitle: typeof slide.subtitle === "string" ? slide.subtitle : "",
+          notes: typeof slide.notes === "string" ? slide.notes : "",
+          theme: typeof slide.theme === "string" ? slide.theme : "default",
+          order: index + 1,
+        }));
+        await saveSlidesToFirebase(presentationId, slidesToSave);
+        console.log("Slides saved to Firebase successfully");
+      } catch (error) {
+        console.error("Failed to save slides to Firebase:", error);
+        // Don't block the UI, but log the error
+      }
     }
   };
 
@@ -2087,6 +2149,46 @@ export default function EditorPage({ params }: { params: { id: string } }) {
       router.push("/viewer");
   };
 
+  const handleOpenAutoPresentation = async () => {
+    if (!presentationId) {
+      alert("Please save the presentation first to use AI Auto-Presentation.");
+      return;
+    }
+
+    // Ensure slides are saved to Firebase before opening auto-presentation
+    try {
+      syncActiveFieldContent("title");
+      syncActiveFieldContent("subtitle");
+      if (notesRef.current) {
+        updateSlideField("notes", notesRef.current.value);
+      }
+
+      const slidesToSave = slides.map((slide, index) => ({
+        id: slide.id,
+        title: typeof slide.title === "string" ? slide.title : "",
+        subtitle: typeof slide.subtitle === "string" ? slide.subtitle : "",
+        notes: typeof slide.notes === "string" ? slide.notes : "",
+        theme: typeof slide.theme === "string" ? slide.theme : "default",
+        order: index + 1,
+      }));
+
+      console.log("💾 Saving slides to Firebase before opening auto-presentation...");
+      console.log("📋 Presentation ID:", presentationId);
+      console.log("📊 Slides to save:", slidesToSave.length);
+      await saveSlidesToFirebase(presentationId, slidesToSave);
+      console.log("✅ Slides saved successfully, opening auto-presentation");
+      console.log("🔗 Navigating to /present with presentationId:", presentationId);
+
+      const fallbackId = slides[0]?.id ?? "";
+      const targetIndex = slides.findIndex((s) => s.id === (selectedSlideId || fallbackId));
+      const slideIndex = targetIndex >= 0 ? targetIndex : 0;
+      router.push(`/present?presentationId=${presentationId}&slideIndex=${slideIndex}&autoPlay=true`);
+    } catch (error) {
+      console.error("Failed to save slides to Firebase:", error);
+      alert("Failed to save slides to Firebase. Please try saving manually first.");
+    }
+  };
+
   const currentLineHeight =
     currentFormatting[activeField]?.lineHeight ?? DEFAULT_FORMATTING[activeField]?.lineHeight ?? 1.2;
 
@@ -2206,6 +2308,14 @@ export default function EditorPage({ params }: { params: { id: string } }) {
                   <button type="button" className={styles.slideshowButton} onClick={handleOpenSlideshow}>
                     Slideshow
                     </button>
+                  <button 
+                    type="button" 
+                    className={styles.autoPresentationButton} 
+                    onClick={handleOpenAutoPresentation}
+                    title="AI Auto-Presentation: Let AI present your slides automatically"
+                  >
+                    🤖 AI Auto-Present
+                  </button>
                   </div>
                   </div>
             </header>
