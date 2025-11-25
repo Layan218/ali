@@ -3,6 +3,8 @@
 import { CSSProperties, RefObject, useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import styles from "@/app/editor/[id]/editor.module.css";
+import SmartAssistantPanel from "@/components/SmartAssistantPanel";
+import type { SlideContent, PresentationContext } from "@/services/smartAssistantService";
 
 type AlignOption = "left" | "center" | "right";
 type ListOption = "bullet" | "number";
@@ -69,6 +71,15 @@ type EditorToolbarProps = {
   themes: readonly ThemeOption[];
   selectedTheme: string;
   onThemeSelect: (themeName: string) => void;
+  isSCDT?: boolean;
+  slideType?: "cover" | "content" | "ending";
+  onSlideTypeSelect?: (slideType: "cover" | "content" | "ending") => void;
+  isAIAssistantOpen?: boolean;
+  onCloseAIAssistant?: () => void;
+  assistantPresentationContext?: PresentationContext;
+  assistantCurrentSlide?: SlideContent | null;
+  assistantAllSlides?: SlideContent[];
+  onApplyToSlide?: (data: { content?: string; notes?: string }) => void;
 };
 
 const ALIGN_OPTIONS: AlignOption[] = ["left", "center", "right"];
@@ -124,9 +135,41 @@ export default function EditorToolbar({
   themes,
   selectedTheme,
   onThemeSelect,
+  isSCDT = false,
+  slideType,
+  onSlideTypeSelect,
+  isAIAssistantOpen = false,
+  onCloseAIAssistant,
+  assistantPresentationContext,
+  assistantCurrentSlide,
+  assistantAllSlides,
+  onApplyToSlide,
 }: EditorToolbarProps) {
   const themeButtonElementRef = useRef<HTMLButtonElement | null>(null);
   const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number } | null>(null);
+  const aiAssistantButtonRef = useRef<HTMLButtonElement | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
+
+  // Handle click outside to close AI Assistant popover
+  useEffect(() => {
+    if (!isAIAssistantOpen) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        popoverRef.current &&
+        !popoverRef.current.contains(event.target as Node) &&
+        aiAssistantButtonRef.current &&
+        !aiAssistantButtonRef.current.contains(event.target as Node)
+      ) {
+        onCloseAIAssistant?.();
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isAIAssistantOpen, onCloseAIAssistant]);
 
   const updateDropdownPosition = () => {
     if (!themeButtonElementRef.current || !isThemePickerOpen) {
@@ -322,6 +365,22 @@ export default function EditorToolbar({
                 <span className={styles.toolbarThemeArrow}>{isThemePickerOpen ? "▲" : "▼"}</span>
               </button>
             </div>
+            {isSCDT && onSlideTypeSelect && (
+              <div className={styles.toolbarGroup}>
+                <label className={styles.toolbarLabel}>Slide Type</label>
+                <select
+                  className={styles.toolbarSelect}
+                  value={slideType || "content"}
+                  onChange={(e) => onSlideTypeSelect(e.target.value as "cover" | "content" | "ending")}
+                  disabled={toolbarDisabled}
+                  onFocus={onRestoreSelection}
+                >
+                  <option value="cover">SCDT – Cover slide</option>
+                  <option value="content">SCDT – Content slide</option>
+                  <option value="ending">SCDT – Ending slide</option>
+                </select>
+              </div>
+            )}
           </div>
 
         <div className={styles.toolbarDivider} role="separator" />
@@ -514,19 +573,41 @@ export default function EditorToolbar({
 
         <div className={styles.toolbarDivider} role="separator" />
 
-        <div className={`${styles.toolbarSection} ${styles.toolbarSectionEnd}`}>
+        <div className={`${styles.toolbarSection} ${styles.toolbarSectionEnd}`} style={{ position: "relative" }}>
           {formattingButtons.map((button) => (
             <button
               type="button"
               key={button}
+              ref={button === "AI Assistant" ? aiAssistantButtonRef : null}
               className={styles.toolbarButton}
               onMouseDown={onToolbarMouseDown}
               onClick={() => toolbarActions[button]?.()}
               disabled={toolbarDisabled && (button === "Image" || button === "Background")}
+              style={
+                button === "AI Assistant" && isAIAssistantOpen
+                  ? {
+                      backgroundColor: "#ecfdf5",
+                      borderColor: "#10b981",
+                    }
+                  : undefined
+              }
             >
               {button}
             </button>
           ))}
+          
+          {/* AI Assistant Popover */}
+          {isAIAssistantOpen && formattingButtons.includes("AI Assistant") && assistantPresentationContext && (
+            <div ref={popoverRef}>
+              <SmartAssistantPanel
+                presentationContext={assistantPresentationContext}
+                currentSlide={assistantCurrentSlide}
+                allSlides={assistantAllSlides}
+                onApplyToSlide={onApplyToSlide}
+                onClose={onCloseAIAssistant}
+              />
+            </div>
+          )}
         </div>
       </div>
     </div>

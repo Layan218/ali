@@ -77,33 +77,21 @@ export default function Home() {
           <img src="/aramco-digital.png" alt="Aramco Digital" className={styles.logo} />
         </div>
         {pathname === "/" ? (
-          <div className={styles.navLinks}>
-            <a href="#features" className={styles.navLink}>Features</a>
-            <a href="#security" className={styles.navLink}>Security</a>
-          </div>
+        <div className={styles.navLinks}>
+          <a href="#features" className={styles.navLink}>Features</a>
+          <a href="#security" className={styles.navLink}>Security</a>
+        </div>
         ) : <div />}
         <div className={styles.topRightActions}>
           <ThemeToggle />
           {!loading && !user ? (
-            <button
-              type="button"
-              className={styles.primary}
-              onClick={() => router.push("/login")}
-            >
+          <button
+            type="button"
+            className={styles.primary}
+            onClick={() => router.push("/login")}
+          >
               Sign in
-            </button>
-          ) : null}
-          {!loading && user ? (
-            <button
-              type="button"
-              className={styles.secondary}
-              onClick={async () => {
-                await signOut(auth);
-                router.push("/login");
-              }}
-            >
-              Sign out
-            </button>
+          </button>
           ) : null}
         </div>
       </nav>
@@ -115,13 +103,18 @@ export default function Home() {
           <p className={styles.description}>
             You can create and present secure, professional presentations directly in your browser — exclusively for Aramco Digital.
           </p>
-          {!loading && !user ? (
+          <div className={styles.heroActions}>
+            <a href="/login" className={styles.primaryButton}>
+              Sign in
+            </a>
+          </div>
+          {!loading && !user && (
             <div className={styles.actions}>
               <button type="button" className={styles.primary} onClick={() => router.push("/login")}>
                 Sign in
               </button>
             </div>
-          ) : null}
+          )}
         </div>
       </main>
 

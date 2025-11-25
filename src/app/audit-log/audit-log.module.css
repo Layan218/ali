@@ -339,65 +339,65 @@
 
 /* Dark Mode Styles - Using :global(.dark) to work with theme toggle */
 :global(.dark) .nav {
-  background: rgba(10, 19, 28, 0.92);
-  border-bottom-color: rgba(148, 163, 184, 0.2);
-}
+    background: rgba(10, 19, 28, 0.92);
+    border-bottom-color: rgba(148, 163, 184, 0.2);
+  }
 
 :global(.dark) .navLink {
-  color: rgba(226, 232, 240, 0.72);
-}
+    color: rgba(226, 232, 240, 0.72);
+  }
 
 :global(.dark) .navLink:hover {
   color: #e2e8f0;
 }
 
 :global(.dark) .navLinkActive {
-  color: #67e8f9;
-}
+    color: #67e8f9;
+  }
 
 :global(.dark) .navLinkActive::after {
-  background: linear-gradient(135deg, #67e8f9, #3cc8b6);
-}
+    background: linear-gradient(135deg, #67e8f9, #3cc8b6);
+  }
 
 :global(.dark) .themeToggle {
-  background: rgba(8, 15, 24, 0.92);
-  border-color: rgba(94, 234, 212, 0.4);
-  color: #e2e8f0;
-}
+    background: rgba(8, 15, 24, 0.92);
+    border-color: rgba(94, 234, 212, 0.4);
+    color: #e2e8f0;
+  }
 
 :global(.dark) .primary {
-  background: #56c1b0;
-  color: #06151b;
-}
+    background: #56c1b0;
+    color: #06151b;
+  }
 
 :global(.dark) .secondary {
-  color: #67e8f9;
-  border-color: #67e8f9;
-}
+    color: #67e8f9;
+    border-color: #67e8f9;
+  }
 
 :global(.dark) .main {
-  background: linear-gradient(180deg, #0b1721 0%, #07121a 100%);
-}
+    background: linear-gradient(180deg, #0b1721 0%, #07121a 100%);
+  }
 
 :global(.dark) .main::before {
-  opacity: 0.35;
+    opacity: 0.35;
   background:
     radial-gradient(120% 60% at 110% 20%, rgba(56, 189, 184, 0.24) 0%, rgba(56, 189, 184, 0) 70%),
     radial-gradient(90% 45% at -10% 10%, rgba(22, 163, 190, 0.24) 0%, rgba(22, 163, 190, 0) 80%),
     radial-gradient(70% 35% at 50% 95%, rgba(14, 165, 233, 0.18) 0%, rgba(14, 165, 233, 0) 70%);
-}
+  }
 
 :global(.dark) .container,
 :global(.dark) .title,
 :global(.dark) .subtitle {
-  color: #e2f6f2;
-}
+    color: #e2f6f2;
+  }
 
 :global(.dark) .logsCard {
-  background: rgba(10, 19, 28, 0.94);
-  border-color: rgba(94, 234, 212, 0.18);
-  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.5);
-}
+    background: rgba(10, 19, 28, 0.94);
+    border-color: rgba(94, 234, 212, 0.18);
+    box-shadow: 0 30px 60px rgba(0, 0, 0, 0.5);
+  }
 
 :global(.dark) .cardHeader h2 {
   color: #e2f6f2;
@@ -413,30 +413,42 @@
 }
 
 :global(.dark) .tableHeaderCell {
-  background: rgba(14, 26, 36, 0.92);
-  color: #e2f6f2;
-  border-bottom-color: rgba(56, 189, 248, 0.25);
-}
+    background: rgba(14, 26, 36, 0.92);
+    color: #e2f6f2;
+    border-bottom-color: rgba(56, 189, 248, 0.25);
+  }
 
 :global(.dark) .tableBodyCell {
-  border-bottom-color: rgba(30, 41, 59, 0.6);
-  color: rgba(226, 232, 240, 0.88);
-}
+    border-bottom-color: rgba(30, 41, 59, 0.6);
+    color: rgba(226, 232, 240, 0.88);
+  }
 
 :global(.dark) .tableBodyRow:nth-child(odd) {
-  background: rgba(14, 26, 36, 0.55);
-}
+    background: rgba(14, 26, 36, 0.55);
+  }
 
 :global(.dark) .tableBodyRow:hover {
-  background: rgba(56, 189, 248, 0.18);
-}
+    background: rgba(56, 189, 248, 0.18);
+  }
 
 :global(.dark) .entryCount {
-  color: rgba(226, 232, 240, 0.7);
-  background: rgba(56, 189, 248, 0.15);
-}
+    color: rgba(226, 232, 240, 0.7);
+    background: rgba(56, 189, 248, 0.15);
+  }
 
 :global(.dark) .footer {
+    color: rgba(226, 232, 240, 0.7);
+  }
+
+.loadingMessage,
+.emptyMessage {
+  padding: 40px 20px;
+  text-align: center;
+  color: #5f6368;
+}
+
+:global(.dark) .loadingMessage,
+:global(.dark) .emptyMessage {
   color: rgba(226, 232, 240, 0.7);
 }
 

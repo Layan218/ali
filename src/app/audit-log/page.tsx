@@ -95,6 +95,11 @@ export default function AuditLogPage() {
               <span className={styles.entryCount}>{logEntries.length} entries</span>
             </div>
             <div className={styles.tableWrap}>
+              {logEntries.length === 0 ? (
+                <div className={styles.emptyMessage}>
+                  No activity logs yet. Actions will appear here as you use the application.
+                </div>
+              ) : (
               <table className={styles.table}>
                 <thead>
                   <tr>
@@ -123,6 +128,7 @@ export default function AuditLogPage() {
                   ))}
                 </tbody>
               </table>
+              )}
             </div>
           </section>
         </div>

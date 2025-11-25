@@ -15,6 +15,13 @@ import {
   type PresentationMeta,
 } from "@/lib/presentationMeta";
 import { useAuth } from "@/context/AuthContext";
+import { encryptText } from "@/lib/encryption";
+import { useTheme } from "@/hooks/useTheme";
+import { generatePresentation, type AIPresentationSlide } from "@/services/aiPresentationService";
+import { onAuthStateChanged } from "firebase/auth";
+import { addDoc, collection, serverTimestamp } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { logAuditEvent } from "@/lib/audit";
 
 type TemplateCard = {
   id: string;
@@ -118,6 +125,17 @@ export default function PresentationsHome() {
   const [presentationMeta, setPresentationMeta] = useState<PresentationMeta[]>([]);
   const [searchInput, setSearchInput] = useState("");
   const [query, setQuery] = useState("");
+  const [isAIModalOpen, setIsAIModalOpen] = useState(false);
+  const [aiTitle, setAITitle] = useState("");
+  const [aiDescription, setAIDescription] = useState("");
+  const [aiGoal, setAIGoal] = useState<string>("");
+  const [aiAudience, setAIAudience] = useState<string>("");
+  const [aiTone, setAITone] = useState<"formal" | "friendly" | "technical">("formal");
+  const [aiLanguage, setAILanguage] = useState<"en" | "ar">("en");
+  const [aiSlideCount, setAISlideCount] = useState(6);
+  const [isAIGenerating, setIsAIGenerating] = useState(false);
+  const [aiProgress, setAIProgress] = useState<string>("");
+  const [aiError, setAiError] = useState<string | null>(null);
   const savedPresentations = useMemo(
     () => presentationMeta.filter((item) => item.isSaved),
     [presentationMeta]
@@ -193,7 +211,14 @@ export default function PresentationsHome() {
     };
   }, [refreshPresentationMeta]);
 
-  const toggleTheme = () => setIsDark((value) => !value);
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      if (!firebaseUser) {
+        router.push("/login");
+        }
+    });
+    return () => unsubscribe();
+  }, [router]);
 
   const goToPresentation = (presentationId: string, title?: string) => {
     router.push(`/editor?presentationId=${encodeURIComponent(presentationId)}&slideId=slide-1`);
@@ -266,6 +291,305 @@ export default function PresentationsHome() {
     }
   };
 
+  const handleAIClick = (event?: MouseEvent<HTMLElement>) => {
+    event?.stopPropagation();
+    setIsAIModalOpen(true);
+  };
+
+  const closeAIModal = () => {
+    setIsAIModalOpen(false);
+    setAITitle("");
+    setAIDescription("");
+    setAIGoal("");
+    setAIAudience("");
+    setAITone("formal");
+    setAILanguage("en");
+    setAISlideCount(6);
+    setAiError(null);
+    setAIProgress("");
+    setIsAIGenerating(false);
+  };
+
+  // Old generateSlides function removed - now using aiPresentationService.generatePresentation()
+
+  const handleAIGenerate = async () => {
+    if (!aiTitle.trim()) {
+      setAiError("Please enter a title");
+      return;
+    }
+
+    setAiError(null);
+    setAIProgress("");
+    setIsAIGenerating(true);
+    const currentUser = auth.currentUser;
+    
+    if (!currentUser) {
+      setAiError("You must be logged in to create a presentation");
+      setIsAIGenerating(false);
+      router.push("/login");
+      return;
+    }
+
+    try {
+      // Generate slides using the new AI service with timeout protection
+      let generatedSlides: AIPresentationSlide[] = [];
+      
+      try {
+        // Set a timeout to prevent hanging
+        const generationPromise = generatePresentation(
+          {
+            topic: aiTitle,
+            goal: aiGoal || undefined,
+            audience: aiAudience || undefined,
+            tone: aiTone,
+            language: aiLanguage,
+            slideCount: aiSlideCount,
+          },
+          (progress) => {
+            // Update progress indicator
+            setAIProgress(progress.message);
+          }
+        );
+
+        // Add timeout protection (30 seconds max)
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error("Generation timeout")), 30000);
+        });
+
+        generatedSlides = await Promise.race([generationPromise, timeoutPromise]);
+      } catch (genError) {
+        console.warn("AI generation failed or timed out, using fallback:", genError);
+        // Fallback: generate simple slides locally
+        generatedSlides = generateLocalFallbackSlides(aiTitle, aiGoal, aiAudience, aiTone, aiLanguage, aiSlideCount);
+        setAIProgress("Using local fallback generator...");
+      }
+
+      if (!generatedSlides || generatedSlides.length === 0) {
+        // Final fallback: create at least one slide
+        generatedSlides = [{
+          title: aiTitle,
+          bullets: ["Overview", "Key points", "Summary"],
+          notes: "",
+          layout: "title-bullets",
+        }];
+      }
+
+      // Create presentation with AI template and default theme
+      // Note: isShared is not set, so it's private by default (only in recent presentations)
+      const presentationRef = await addDoc(collection(db, "presentations"), {
+        ownerId: currentUser.uid,
+        title: aiTitle,
+        template: "AI Generated",
+        templateId: "ai-modern", // Mark as using AI template
+        theme: "Digital Solutions – Black", // Default theme
+        themeId: "digital_solutions_black",
+        isShared: false, // Private by default, user can share later
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      const presentationId = presentationRef.id;
+
+      // Create slides with AI template styling
+      let firstSlideId: string | null = null;
+      for (let i = 0; i < generatedSlides.length; i++) {
+        const slide: AIPresentationSlide = generatedSlides[i];
+        const isTitleSlide = i === 0;
+        const slideTitle = slide.title || "Untitled Slide";
+        
+        // Convert bullets array to content string format (bullet points with newlines)
+        let slideSubtitle = "";
+        let slideContent = "";
+        
+        if (isTitleSlide) {
+          // Title slide: use description or audience info as subtitle
+          if (aiDescription.trim()) {
+            slideSubtitle = aiDescription.trim();
+          } else if (aiAudience.trim()) {
+            slideSubtitle = `Presented to ${aiAudience}`;
+          } else {
+            slideSubtitle = "AI Generated Presentation";
+          }
+          slideContent = "";
+        } else {
+          // Content slides: convert bullets array to bullet point string
+          if (slide.bullets && slide.bullets.length > 0) {
+            slideContent = slide.bullets.map(bullet => `• ${bullet}`).join("\n");
+          }
+          slideSubtitle = "";
+        }
+        
+        try {
+          // Prepare slide data
+          const slideData: any = {
+            order: i + 1,
+            title: slideTitle,
+            notes: slide.notes ? encryptText(slide.notes) : encryptText(""),
+            theme: "Digital Solutions – Black", // Default theme for all slides
+            templateId: "ai-modern",
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          };
+
+          // Add subtitle/content based on slide type
+          if (isTitleSlide && slideSubtitle) {
+            // Title slide: subtitle contains description/audience info
+            slideData.subtitle = encryptText(slideSubtitle);
+          } else if (!isTitleSlide && slideContent) {
+            // Content slides: content contains bullet points
+            slideData.content = encryptText(slideContent);
+          }
+
+          const slideRef = await addDoc(collection(db, "presentations", presentationId, "slides"), slideData);
+          if (i === 0) {
+            firstSlideId = slideRef.id;
+          }
+        } catch (slideError: any) {
+          console.error(`Failed to create slide ${i + 1}:`, slideError);
+          const errorMessage = slideError?.message || `Failed to create slide ${i + 1}`;
+          throw new Error(`${errorMessage}. Please check your Firestore permissions and try again.`);
+        }
+      }
+
+      recordPresentationDraft(presentationId, aiTitle);
+
+      await logAuditEvent({
+        presentationId,
+        userId: currentUser.uid,
+        userEmail: currentUser.email ?? null,
+        action: "CREATE_PRESENTATION",
+        details: {
+          title: aiTitle,
+          templateName: "AI Generated",
+          slideCount: generatedSlides.length,
+        },
+      });
+
+      // Close modal before navigation
+      closeAIModal();
+      
+      // Navigate to editor using the correct route format
+      const slideId = firstSlideId || "slide-1";
+      router.push(`/editor/${encodeURIComponent(presentationId)}?slideId=${encodeURIComponent(slideId)}`);
+    } catch (error) {
+      console.error("Failed to create AI presentation", error);
+      const errorMessage = error instanceof Error ? error.message : "Failed to create presentation. Please try again.";
+      setAiError(errorMessage);
+      setIsAIGenerating(false);
+      setAIProgress("");
+    }
+  };
+
+  // Local fallback generator for when AI service fails
+  const generateLocalFallbackSlides = (
+    title: string,
+    goal?: string,
+    audience?: string,
+    tone: "formal" | "friendly" | "technical" = "formal",
+    language: "en" | "ar" = "en",
+    slideCount: number = 6
+  ): AIPresentationSlide[] => {
+    const slides: AIPresentationSlide[] = [];
+    const count = Math.max(1, Math.min(20, slideCount));
+
+    // Title slide
+    slides.push({
+      title: title,
+      bullets: audience ? [`Presented to ${audience}`] : [],
+      notes: "",
+      layout: "title-only",
+    });
+
+    if (count <= 1) return slides;
+
+    // Introduction slide
+    slides.push({
+      title: language === "en" ? "Overview" : "نظرة عامة",
+      bullets: [
+        `Introduction to ${title}`,
+        goal ? `Goal: ${goal}` : "Key objectives",
+        "Main topics to be covered",
+      ],
+      notes: "",
+      layout: "title-bullets",
+    });
+
+    if (count <= 2) return slides;
+
+    // Content slides
+    const contentTitles = [
+      language === "en" ? "Key Points" : "النقاط الرئيسية",
+      language === "en" ? "Details" : "التفاصيل",
+      language === "en" ? "Analysis" : "التحليل",
+      language === "en" ? "Recommendations" : "التوصيات",
+      language === "en" ? "Next Steps" : "الخطوات التالية",
+    ];
+
+    for (let i = 2; i < count; i++) {
+      const titleIndex = (i - 2) % contentTitles.length;
+      slides.push({
+        title: contentTitles[titleIndex],
+        bullets: [
+          `Point 1 related to ${title}`,
+          `Point 2 related to ${title}`,
+          `Point 3 related to ${title}`,
+          `Point 4 related to ${title}`,
+        ],
+        notes: "",
+        layout: "title-bullets",
+      });
+    }
+
+    return slides;
+  };
+
+  async function createPresentation(templateName: string) {
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      router.push("/login");
+      return;
+    }
+
+    try {
+      // Create presentation - private by default (only in recent presentations, not in team dashboard)
+      const presentationRef = await addDoc(collection(db, "presentations"), {
+        ownerId: currentUser.uid,
+        title: templateName,
+        template: templateName,
+        isShared: false, // Private by default, user can share later via Share button
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      const presentationId = presentationRef.id;
+
+      await addDoc(collection(db, "presentations", presentationId, "slides"), {
+        order: 1,
+        title: "Slide 1",
+        content: "",
+        notes: "",
+        theme: "default",
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+
+      recordPresentationDraft(presentationId, templateName);
+
+      await logAuditEvent({
+        presentationId,
+        userId: currentUser.uid,
+        userEmail: currentUser.email ?? null,
+        action: "CREATE_PRESENTATION",
+        details: {
+          title: templateName,
+          templateName,
+        },
+      });
+
+      router.push(`/editor/${encodeURIComponent(presentationId)}?presentationId=${encodeURIComponent(presentationId)}&slideId=slide-1`);
+    } catch (error) {
+      console.error("Failed to create presentation", error);
+    }
+  }
+
   return (
     <>
       <nav className={styles.nav}>
@@ -331,7 +655,7 @@ export default function PresentationsHome() {
                     } else if (template.id === "template-executive") {
                       void handleExecutiveSummaryClick(event);
                     } else {
-                      goToPresentation(template.id);
+                      void createPresentation(template.title);
                     }
                   }}
                 >
@@ -373,6 +697,357 @@ export default function PresentationsHome() {
         </main>
 
         <TeamChatWidget />
+
+        {/* AI Generation Modal */}
+        {isAIModalOpen && (
+          <div
+            style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: "rgba(0, 0, 0, 0.5)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 1000,
+            }}
+            onClick={closeAIModal}
+          >
+            <div
+              style={{
+                backgroundColor: "#ffffff",
+                borderRadius: "16px",
+                padding: "32px",
+                maxWidth: "600px",
+                width: "90%",
+                maxHeight: "90vh",
+                overflowY: "auto",
+                boxShadow: "0 20px 40px rgba(0, 0, 0, 0.2)",
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 style={{ marginTop: 0, marginBottom: "24px", fontSize: "24px", fontWeight: 600 }}>
+                Create AI Presentation
+              </h2>
+
+              {aiError && (
+                <div
+                  style={{
+                    marginBottom: "20px",
+                    padding: "12px 16px",
+                    backgroundColor: "#fef2f2",
+                    border: "1px solid #fecaca",
+                    borderRadius: "8px",
+                    color: "#991b1b",
+                    fontSize: "14px",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span>{aiError}</span>
+                    <button
+                      onClick={() => setAiError(null)}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        color: "#991b1b",
+                        cursor: "pointer",
+                        fontSize: "18px",
+                        padding: "0 8px",
+                        lineHeight: 1,
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div style={{ marginBottom: "20px" }}>
+                <label
+                  style={{
+                    display: "block",
+                    marginBottom: "8px",
+                    fontSize: "14px",
+                    fontWeight: 500,
+                    color: "#374151",
+                  }}
+                >
+                  Title <span style={{ color: "#ef4444" }}>*</span>
+                </label>
+                <input
+                  type="text"
+                  value={aiTitle}
+                  onChange={(e) => setAITitle(e.target.value)}
+                  placeholder="Enter presentation title"
+                  style={{
+                    width: "100%",
+                    padding: "12px",
+                    borderRadius: "8px",
+                    border: "1px solid #d1d5db",
+                    fontSize: "14px",
+                  }}
+                />
+              </div>
+
+              <div style={{ marginBottom: "20px" }}>
+                <label
+                  style={{
+                    display: "block",
+                    marginBottom: "8px",
+                    fontSize: "14px",
+                    fontWeight: 500,
+                    color: "#374151",
+                  }}
+                >
+                  Description
+                </label>
+                <textarea
+                  value={aiDescription}
+                  onChange={(e) => setAIDescription(e.target.value)}
+                  placeholder="Describe what your presentation should be about..."
+                  rows={3}
+                  style={{
+                    width: "100%",
+                    padding: "12px",
+                    borderRadius: "8px",
+                    border: "1px solid #d1d5db",
+                    fontSize: "14px",
+                    fontFamily: "inherit",
+                    resize: "vertical",
+                  }}
+                />
+              </div>
+
+              <div style={{ marginBottom: "20px" }}>
+                <label
+                  style={{
+                    display: "block",
+                    marginBottom: "8px",
+                    fontSize: "14px",
+                    fontWeight: 500,
+                    color: "#374151",
+                  }}
+                >
+                  Goal / Purpose
+                </label>
+                <select
+                  value={aiGoal}
+                  onChange={(e) => setAIGoal(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "12px",
+                    borderRadius: "8px",
+                    border: "1px solid #d1d5db",
+                    fontSize: "14px",
+                    backgroundColor: "#ffffff",
+                  }}
+                >
+                  <option value="">Select goal (optional)</option>
+                  <option value="Inform">Inform</option>
+                  <option value="Persuade">Persuade</option>
+                  <option value="Train">Train</option>
+                  <option value="Review">Review</option>
+                  <option value="Propose">Propose</option>
+                </select>
+              </div>
+
+              <div style={{ marginBottom: "20px" }}>
+                <label
+                  style={{
+                    display: "block",
+                    marginBottom: "8px",
+                    fontSize: "14px",
+                    fontWeight: 500,
+                    color: "#374151",
+                  }}
+                >
+                  Target Audience
+                </label>
+                <input
+                  type="text"
+                  value={aiAudience}
+                  onChange={(e) => setAIAudience(e.target.value)}
+                  placeholder="e.g., Executives, Team members, Clients"
+                  style={{
+                    width: "100%",
+                    padding: "12px",
+                    borderRadius: "8px",
+                    border: "1px solid #d1d5db",
+                    fontSize: "14px",
+                  }}
+                />
+              </div>
+
+              <div style={{ marginBottom: "20px" }}>
+                <label
+                  style={{
+                    display: "block",
+                    marginBottom: "8px",
+                    fontSize: "14px",
+                    fontWeight: 500,
+                    color: "#374151",
+                  }}
+                >
+                  Tone
+                </label>
+                <div style={{ display: "flex", gap: "12px" }}>
+                  {(["formal", "friendly", "technical"] as const).map((tone) => (
+                    <label
+                      key={tone}
+                      style={{
+                        flex: 1,
+                        padding: "10px",
+                        borderRadius: "8px",
+                        border: `2px solid ${aiTone === tone ? "#56C1B0" : "#d1d5db"}`,
+                        backgroundColor: aiTone === tone ? "#f0fdfa" : "#ffffff",
+                        cursor: "pointer",
+                        textAlign: "center",
+                        fontSize: "14px",
+                        textTransform: "capitalize",
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        value={tone}
+                        checked={aiTone === tone}
+                        onChange={(e) => setAITone(e.target.value as "formal" | "friendly" | "technical")}
+                        style={{ marginRight: "6px" }}
+                      />
+                      {tone}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ marginBottom: "20px" }}>
+                <label
+                  style={{
+                    display: "block",
+                    marginBottom: "8px",
+                    fontSize: "14px",
+                    fontWeight: 500,
+                    color: "#374151",
+                  }}
+                >
+                  Language
+                </label>
+                <div style={{ display: "flex", gap: "12px" }}>
+                  {(["en", "ar"] as const).map((lang) => (
+                    <label
+                      key={lang}
+                      style={{
+                        flex: 1,
+                        padding: "10px",
+                        borderRadius: "8px",
+                        border: `2px solid ${aiLanguage === lang ? "#56C1B0" : "#d1d5db"}`,
+                        backgroundColor: aiLanguage === lang ? "#f0fdfa" : "#ffffff",
+                        cursor: "pointer",
+                        textAlign: "center",
+                        fontSize: "14px",
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        value={lang}
+                        checked={aiLanguage === lang}
+                        onChange={(e) => setAILanguage(e.target.value as "en" | "ar")}
+                        style={{ marginRight: "6px" }}
+                      />
+                      {lang === "en" ? "English" : "Arabic"}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ marginBottom: "24px" }}>
+                <label
+                  style={{
+                    display: "block",
+                    marginBottom: "8px",
+                    fontSize: "14px",
+                    fontWeight: 500,
+                    color: "#374151",
+                  }}
+                >
+                  Number of Slides
+                </label>
+                <input
+                  type="number"
+                  value={aiSlideCount}
+                  onChange={(e) => setAISlideCount(Math.max(1, Math.min(20, parseInt(e.target.value) || 6)))}
+                  min={1}
+                  max={20}
+                  style={{
+                    width: "100%",
+                    padding: "12px",
+                    borderRadius: "8px",
+                    border: "1px solid #d1d5db",
+                    fontSize: "14px",
+                  }}
+                />
+                <p style={{ marginTop: "4px", fontSize: "12px", color: "#6b7280" }}>
+                  Between 1 and 20 slides
+                </p>
+              </div>
+
+              {aiProgress && (
+                <div
+                  style={{
+                    marginBottom: "20px",
+                    padding: "12px 16px",
+                    backgroundColor: "#eff6ff",
+                    border: "1px solid #bfdbfe",
+                    borderRadius: "8px",
+                    color: "#1e40af",
+                    fontSize: "14px",
+                  }}
+                >
+                  {aiProgress}
+                </div>
+              )}
+
+              <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
+                <button
+                  type="button"
+                  onClick={closeAIModal}
+                  disabled={isAIGenerating}
+                  style={{
+                    padding: "10px 20px",
+                    borderRadius: "8px",
+                    border: "1px solid #d1d5db",
+                    backgroundColor: "#ffffff",
+                    color: "#374151",
+                    fontSize: "14px",
+                    fontWeight: 500,
+                    cursor: isAIGenerating ? "not-allowed" : "pointer",
+                    opacity: isAIGenerating ? 0.5 : 1,
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAIGenerate}
+                  disabled={isAIGenerating || !aiTitle.trim()}
+                  style={{
+                    padding: "10px 20px",
+                    borderRadius: "8px",
+                    border: "none",
+                    backgroundColor: isAIGenerating || !aiTitle.trim() ? "#9ca3af" : "#56C1B0",
+                    color: "#ffffff",
+                    fontSize: "14px",
+                    fontWeight: 500,
+                    cursor: isAIGenerating || !aiTitle.trim() ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {isAIGenerating ? (aiProgress || "Generating...") : "Generate Presentation"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <footer className={styles.footer}>© 2025 Aramco Digital - Secure Presentation Tool</footer>
       </div>
