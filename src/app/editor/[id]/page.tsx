@@ -2705,6 +2705,8 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
       return;
     }
     const normalizedValue = rawValue.includes("@") ? rawValue.toLowerCase() : rawValue;
+    const currentCollaborators = presentationCollaboratorIds;
+    const collaboratorsLowerSet = new Set(currentCollaborators.map(c => c.toLowerCase()));
     if (
       (presentationOwnerId && presentationOwnerId.toLowerCase() === normalizedValue.toLowerCase()) ||
       collaboratorsLowerSet.has(normalizedValue.toLowerCase())
@@ -2712,7 +2714,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
       setTeamModalError("This member is already on the team.");
       return;
     }
-      const nextCollaborators = [...collaborators, normalizedValue];
+    const nextCollaborators = [...currentCollaborators, normalizedValue];
       try {
         setIsUpdatingTeam(true);
         // Update teamRoles to set new member as "editor"
@@ -2781,7 +2783,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
 
   const handleRemoveCollaborator = async (member: string) => {
     if (!presentationId) return;
-      const nextCollaborators = collaborators.filter((value) => value !== member);
+    const nextCollaborators = presentationCollaboratorIds.filter((value) => value !== member);
       try {
         setIsUpdatingTeam(true);
         // Remove from teamRoles
