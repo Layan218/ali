@@ -192,6 +192,18 @@ export default function PresentPage() {
           <div className={styles.presentationModeEmpty}>{errorMessage}</div>
         ) : activeSlide ? (
           <article className={`${styles.presentationModeSlide} ${backgroundClass}`} style={{ position: "relative" }}>
+            {/* Aramco Digital Logo in top right */}
+            <div style={{
+              position: "absolute",
+              top: "16px",
+              right: "20px",
+              zIndex: 10,
+              pointerEvents: "none",
+              maxWidth: "120px",
+              height: "auto",
+            }}>
+              <img src="/aramco-digital.png" alt="Aramco Digital" style={{ width: "100%", height: "auto", objectFit: "contain", display: "block" }} />
+            </div>
             <h1 className={styles.presentationModeTitle}>{activeSlide.title || "Untitled slide"}</h1>
             <div
               className={styles.presentationModeContent}

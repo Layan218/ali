@@ -336,12 +336,17 @@ export default function PresentationsHome() {
           }
         );
 
-        // Add timeout protection (30 seconds max)
+        // Add timeout protection (60 seconds max for OpenAI API)
         const timeoutPromise = new Promise<never>((_, reject) => {
-          setTimeout(() => reject(new Error("Generation timeout")), 30000);
+          setTimeout(() => reject(new Error("Generation timeout")), 60000);
         });
 
         generatedSlides = await Promise.race([generationPromise, timeoutPromise]);
+        
+        // Update progress for cover image generation
+        if (generatedSlides.length > 0) {
+          setAIProgress("Generating cover image with AI...");
+        }
       } catch (genError) {
         console.warn("AI generation failed or timed out, using fallback:", genError);
         // Fallback: generate simple slides locally
@@ -359,41 +364,132 @@ export default function PresentationsHome() {
         }];
       }
 
-      // Create presentation with AI template and default theme
+      // Use AI-recommended theme if available, otherwise select intelligently
+      const aiRecommendedTheme = (generatedSlides[0] as any)?._recommendedTheme;
+      const availableThemes = [
+        { name: "Digital Solutions", id: "digital-solutions", themeId: "digital_solutions_black" },
+        { name: "SCDT", id: "scdt", themeId: "scdt" },
+        { name: "Aramco Classic", id: "aramco-classic", themeId: "aramco_classic" },
+        { name: "Default", id: "default", themeId: "default" },
+      ];
+      
+      let selectedTheme;
+      if (aiRecommendedTheme) {
+        // Use AI-recommended theme
+        const themeMap: Record<string, typeof availableThemes[0]> = {
+          "digital-solutions": availableThemes[0],
+          "scdt": availableThemes[1],
+          "aramco-classic": availableThemes[2],
+          "default": availableThemes[3],
+        };
+        selectedTheme = themeMap[aiRecommendedTheme.toLowerCase()] || availableThemes[0];
+        console.log(`Using AI-recommended theme: ${selectedTheme.name}`);
+      } else {
+        // Fallback: Select theme based on topic hash for consistency
+        const themeIndex = Math.abs(aiTitle.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0)) % availableThemes.length;
+        selectedTheme = availableThemes[themeIndex];
+      }
+
+      // Create presentation with AI template and selected theme
       // Note: isShared is not set, so it's private by default (only in recent presentations)
       const presentationRef = await addDoc(collection(db, "presentations"), {
         ownerId: currentUser.uid,
         title: aiTitle,
         template: "AI Generated",
         templateId: "ai-modern", // Mark as using AI template
-        theme: "Digital Solutions – Black", // Default theme
-        themeId: "digital_solutions_black",
+        theme: selectedTheme.name,
+        themeId: selectedTheme.themeId,
         isShared: false, // Private by default, user can share later
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
       const presentationId = presentationRef.id;
 
-      // Create slides with AI template styling
+      // Helper function to generate AI image for cover slide using OpenAI DALL-E
+      const generateAICoverImage = async (topic: string, imagePrompt?: string): Promise<string | null> => {
+        try {
+          const response = await fetch("/api/openai/generate-image", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              prompt: imagePrompt || `Professional, modern, corporate presentation cover image for "${topic}". Clean, minimalist design with abstract geometric elements, professional color scheme, suitable for business presentation. High quality, professional photography style.`,
+              topic: topic,
+            }),
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            console.warn("AI image generation failed:", errorData.error || `HTTP ${response.status}`);
+            return null;
+          }
+
+          const data = await response.json();
+          return data.imageUrl || null;
+        } catch (error) {
+          console.warn("Failed to generate AI cover image:", error);
+          return null;
+        }
+      };
+
+      // Helper function to get image URL from imagePrompt using Unsplash Source API (for non-cover slides)
+      const getImageFromPrompt = async (imagePrompt: string | undefined, slideIndex: number): Promise<string | null> => {
+        if (!imagePrompt) return null;
+        
+        try {
+          // Extract keywords from imagePrompt for Unsplash search
+          const keywords = imagePrompt
+            .toLowerCase()
+            .replace(/[^\w\s]/g, " ")
+            .split(/\s+/)
+            .filter(word => word.length > 3)
+            .slice(0, 3)
+            .join(",") || "business,professional";
+          
+          // Use Unsplash Source API (free, no API key needed for basic usage)
+          // Format: https://source.unsplash.com/800x600/?keywords
+          const imageUrl = `https://source.unsplash.com/800x600/?${encodeURIComponent(keywords)}&sig=${slideIndex}`;
+          
+          // Return the URL (we'll store it as-is, images will be loaded on demand)
+          return imageUrl;
+        } catch (error) {
+          console.warn("Failed to generate image URL from prompt:", error);
+          return null;
+        }
+      };
+
+      // Create slides with AI template styling, themes, layouts, and images
       let firstSlideId: string | null = null;
+      const totalSlides = generatedSlides.length;
+      
       for (let i = 0; i < generatedSlides.length; i++) {
         const slide: AIPresentationSlide = generatedSlides[i];
         const isTitleSlide = i === 0;
+        const isLastSlide = i === totalSlides - 1;
         const slideTitle = slide.title || "Untitled Slide";
+        
+        // Determine slideType based on position (clean layouts)
+        let slideType: "cover" | "content" | "ending" = "content";
+        if (isTitleSlide) {
+          slideType = "cover";
+        } else if (isLastSlide && totalSlides > 1) {
+          slideType = "ending";
+        }
         
         // Convert bullets array to content string format (bullet points with newlines)
         let slideSubtitle = "";
         let slideContent = "";
         
         if (isTitleSlide) {
-          // Title slide: use description or audience info as subtitle
-          if (aiDescription.trim()) {
-            slideSubtitle = aiDescription.trim();
-          } else if (aiAudience.trim()) {
-            slideSubtitle = `Presented to ${aiAudience}`;
-          } else {
-            slideSubtitle = "AI Generated Presentation";
-          }
+          // Title slide: Only title + date (no subtitle, no "AI Generated Presentation")
+          // Add current date as subtitle
+          const currentDate = new Date().toLocaleDateString('en-US', { 
+            month: 'long', 
+            day: 'numeric', 
+            year: 'numeric' 
+          });
+          slideSubtitle = currentDate;
           slideContent = "";
         } else {
           // Content slides: convert bullets array to bullet point string
@@ -404,12 +500,13 @@ export default function PresentationsHome() {
         }
         
         try {
-          // Prepare slide data
+          // Prepare slide data with theme, layout, and image
           const slideData: any = {
             order: i + 1,
             title: slideTitle,
             notes: slide.notes ? encryptText(slide.notes) : encryptText(""),
-            theme: "Digital Solutions – Black", // Default theme for all slides
+            theme: selectedTheme.name, // Use selected beautiful theme
+            slideType: slideType, // Set clean layout based on position
             templateId: "ai-modern",
             formatting: createDefaultFormatting(),
             createdAt: serverTimestamp(),
@@ -418,11 +515,39 @@ export default function PresentationsHome() {
 
           // Add subtitle/content based on slide type
           if (isTitleSlide && slideSubtitle) {
-            // Title slide: subtitle contains description/audience info
+            // Title slide: subtitle contains date only
             slideData.subtitle = encryptText(slideSubtitle);
           } else if (!isTitleSlide && slideContent) {
             // Content slides: content contains bullet points
             slideData.content = encryptText(slideContent);
+          }
+
+          // Slide 1 (cover): Automatically insert default cover image - no modal, no manual upload, no save button required
+          if (isTitleSlide) {
+            // Always apply default cover image to slide 1 - directly to slide state
+            slideData.imageUrl = "/digital_solutions_black_theme_bg.png"; // Default cover image URL
+            slideData.imageX = 300; // Center horizontally (300px from left, leaving 300px on right for 1000px slide)
+            slideData.imageY = 400; // Position below title and date (400px from top)
+            slideData.imageWidth = 400; // 40% of slide width for prominent display
+            slideData.imageHeight = 300; // Maintain aspect ratio
+            
+            if (i === 0) {
+              setAIProgress("Adding default cover image...");
+            }
+          } else {
+            // Content slides: Use Unsplash images if AI recommends them
+            const needsImage = slide.needsImage !== undefined ? slide.needsImage : i < 3;
+            if (needsImage && slide.imagePrompt) {
+              setAIProgress(`Adding images to slide ${i + 1}...`);
+              const imageUrl = await getImageFromPrompt(slide.imagePrompt, i);
+              if (imageUrl) {
+                slideData.imageUrl = imageUrl;
+                slideData.imageX = 600; // Right side of slide
+                slideData.imageY = 200; // Top-middle area
+                slideData.imageWidth = 350; // 35% of 1000px slide width
+                slideData.imageHeight = 263; // Maintain 4:3 aspect ratio
+              }
+            }
           }
 
           const slideRef = await addDoc(collection(db, "presentations", presentationId, "slides"), slideData);

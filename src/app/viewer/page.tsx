@@ -434,6 +434,18 @@ function ViewerContent() {
           </div>
         ) : (
           <article ref={slideRef} className={`${styles.slideCard} ${styles.slideCardActive} ${backgroundClass}`} style={{ position: "relative", overflow: "visible" }}>
+            {/* Aramco Digital Logo in top right */}
+            <div style={{
+              position: "absolute",
+              top: "16px",
+              right: "20px",
+              zIndex: 10,
+              pointerEvents: "none",
+              maxWidth: "120px",
+              height: "auto",
+            }}>
+              <img src="/aramco-digital.png" alt="Aramco Digital" style={{ width: "100%", height: "auto", objectFit: "contain", display: "block" }} />
+            </div>
             <h1 className={styles.slideTitle}>{slide.title}</h1>
             <div 
               className={styles.slideContent}
