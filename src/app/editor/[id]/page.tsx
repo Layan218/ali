@@ -3822,7 +3822,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                           <img src="/themes/aramco-logo-classic.png" alt="Aramco" />
                         </div>
                       ) : selectedSlide ? (
-                        /* Default / Normal Slide Layout */
+                        /* Default / Normal Slide Layout with Aramco Digital Styling */
                         (() => {
                           const layout = selectedSlide.layout ?? "layout2";
                           const formatting = ensureFormatting(selectedSlide.formatting);
@@ -3850,28 +3850,34 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                           // Layout 1: Title only
                           if (layout === "layout1") {
                             return (
-                              <div className={styles.layout1}>
-                                <div
-                                  ref={titleRef}
-                                  className={titleClass}
-                                  contentEditable={!isReadOnly}
-                                  suppressContentEditableWarning
-                                  role="textbox"
-                                  aria-label="Slide title"
-                                  onInput={(e) => {
-                                    e.preventDefault();
-                                    handleContentInput("title");
-                                  }}
-                                  onFocus={() => handleContentFocus("title")}
-                                  onBlur={() => handleContentBlur("title")}
-                                  style={{
-                                    ...getTextStyle("title"),
-                                    width: "100%",
-                                    textAlign: "center",
-                                  }}
-                                  data-readonly={isReadOnly}
-                                />
-                              </div>
+                              <>
+                                {/* Aramco Digital Logo in top right */}
+                                <div className={styles.themeLogoTopRight}>
+                                  <img src="/aramco-digital.png" alt="Aramco Digital" />
+                                </div>
+                                <div className={styles.layout1}>
+                                  <div
+                                    ref={titleRef}
+                                    className={titleClass}
+                                    contentEditable={!isReadOnly}
+                                    suppressContentEditableWarning
+                                    role="textbox"
+                                    aria-label="Slide title"
+                                    onInput={(e) => {
+                                      e.preventDefault();
+                                      handleContentInput("title");
+                                    }}
+                                    onFocus={() => handleContentFocus("title")}
+                                    onBlur={() => handleContentBlur("title")}
+                                    style={{
+                                      ...getTextStyle("title"),
+                                      width: "100%",
+                                      textAlign: "center",
+                                    }}
+                                    data-readonly={isReadOnly}
+                                  />
+                                </div>
+                              </>
                             );
                           }
                           
@@ -3888,10 +3894,80 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                               const rightContent = parts.slice(midPoint).join('\n\n');
                               
                               return (
+                                <>
+                                  {/* Aramco Digital Logo in top right */}
+                                  <div className={styles.themeLogoTopRight}>
+                                    <img src="/aramco-digital.png" alt="Aramco Digital" />
+                                  </div>
+                                  <div className={styles.layout3}>
+                                    <div
+                                      ref={titleRef}
+                                      className={styles.slideTitleInput}
+                                      contentEditable={!isReadOnly}
+                                      suppressContentEditableWarning
+                                      role="textbox"
+                                      aria-label="Slide title"
+                                      onInput={(e) => {
+                                        e.preventDefault();
+                                        handleContentInput("title");
+                                      }}
+                                      onFocus={() => handleContentFocus("title")}
+                                      onBlur={() => handleContentBlur("title")}
+                                      style={{
+                                        ...getTextStyle("title"),
+                                        width: "100%",
+                                        textAlign: "center",
+                                        marginBottom: "clamp(24px, 3vw, 40px)",
+                                      }}
+                                      data-readonly={isReadOnly}
+                                    />
+                                    <div className={styles.layout3Columns}>
+                                      <div className={styles.layout3Column}>
+                                        <div
+                                          className={styles.slideContentHtml}
+                                          dangerouslySetInnerHTML={{ __html: leftContent || "" }}
+                                          style={{
+                                            fontSize: activeThemeObj.bulletFontSize,
+                                            fontWeight: activeThemeObj.bulletFontWeight,
+                                            color: activeThemeObj.bulletColor,
+                                            lineHeight: activeThemeObj.bulletLineHeight,
+                                          }}
+                                        />
+                                      </div>
+                                      <div className={styles.layout3Column}>
+                                        <div
+                                          className={styles.slideContentHtml}
+                                          dangerouslySetInnerHTML={{ __html: rightContent || "" }}
+                                          style={{
+                                            fontSize: activeThemeObj.bulletFontSize,
+                                            fontWeight: activeThemeObj.bulletFontWeight,
+                                            color: activeThemeObj.bulletColor,
+                                            lineHeight: activeThemeObj.bulletLineHeight,
+                                          }}
+                                        />
+                                      </div>
+                                    </div>
+                                  </div>
+                                </>
+                              );
+                            }
+                            
+                            // For text content, split into two columns
+                            const lines = content.split('\n').filter(line => line.trim().length > 0);
+                            const midPoint = Math.ceil(lines.length / 2);
+                            const leftColumn = lines.slice(0, midPoint);
+                            const rightColumn = lines.slice(midPoint);
+                            
+                            return (
+                              <>
+                                {/* Aramco Digital Logo in top right */}
+                                <div className={styles.themeLogoTopRight}>
+                                  <img src="/aramco-digital.png" alt="Aramco Digital" />
+                                </div>
                                 <div className={styles.layout3}>
                                   <div
                                     ref={titleRef}
-                                    className={styles.slideTitleInput}
+                                    className={titleClass}
                                     contentEditable={!isReadOnly}
                                     suppressContentEditableWarning
                                     role="textbox"
@@ -3905,116 +3981,63 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                                     style={{
                                       ...getTextStyle("title"),
                                       width: "100%",
-                                      textAlign: "center",
                                       marginBottom: "clamp(24px, 3vw, 40px)",
                                     }}
                                     data-readonly={isReadOnly}
                                   />
                                   <div className={styles.layout3Columns}>
                                     <div className={styles.layout3Column}>
-                                      <div
-                                        className={styles.slideContentHtml}
-                                        dangerouslySetInnerHTML={{ __html: leftContent || "" }}
-                                        style={{
-                                          fontSize: activeThemeObj.bulletFontSize,
-                                          fontWeight: activeThemeObj.bulletFontWeight,
-                                          color: activeThemeObj.bulletColor,
-                                          lineHeight: activeThemeObj.bulletLineHeight,
-                                        }}
-                                      />
+                                      {leftColumn.map((line, index) => {
+                                        const trimmed = line.trim();
+                                        if (trimmed.startsWith('•') || trimmed.startsWith('-')) {
+                                          const text = trimmed.substring(1).trim();
+                                          return (
+                                            <div key={`left-${index}`} style={{ marginBottom: "clamp(12px, 1.5vw, 20px)", display: "flex", alignItems: "flex-start" }}>
+                                              <span style={{ marginRight: "0.75rem", fontSize: "1.5em", lineHeight: "1", marginTop: "0.1em", flexShrink: 0, fontWeight: "bold", color: activeThemeObj.titleColor }}>•</span>
+                                              <span style={{ flex: 1, wordBreak: "break-word", fontSize: activeThemeObj.bulletFontSize, fontWeight: activeThemeObj.bulletFontWeight, color: activeThemeObj.bulletColor, lineHeight: activeThemeObj.bulletLineHeight }}>{text}</span>
+                                            </div>
+                                          );
+                                        }
+                                        return (
+                                          <div key={`left-${index}`} style={{ marginBottom: "clamp(12px, 1.5vw, 20px)", fontSize: activeThemeObj.bulletFontSize, fontWeight: activeThemeObj.bulletFontWeight, color: activeThemeObj.bulletColor, lineHeight: activeThemeObj.bulletLineHeight, wordBreak: "break-word" }}>
+                                            {trimmed}
+                                          </div>
+                                        );
+                                      })}
                                     </div>
                                     <div className={styles.layout3Column}>
-                                      <div
-                                        className={styles.slideContentHtml}
-                                        dangerouslySetInnerHTML={{ __html: rightContent || "" }}
-                                        style={{
-                                          fontSize: activeThemeObj.bulletFontSize,
-                                          fontWeight: activeThemeObj.bulletFontWeight,
-                                          color: activeThemeObj.bulletColor,
-                                          lineHeight: activeThemeObj.bulletLineHeight,
-                                        }}
-                                      />
+                                      {rightColumn.map((line, index) => {
+                                        const trimmed = line.trim();
+                                        if (trimmed.startsWith('•') || trimmed.startsWith('-')) {
+                                          const text = trimmed.substring(1).trim();
+                                          return (
+                                            <div key={`right-${index}`} style={{ marginBottom: "clamp(12px, 1.5vw, 20px)", display: "flex", alignItems: "flex-start" }}>
+                                              <span style={{ marginRight: "0.75rem", fontSize: "1.5em", lineHeight: "1", marginTop: "0.1em", flexShrink: 0, fontWeight: "bold", color: activeThemeObj.titleColor }}>•</span>
+                                              <span style={{ flex: 1, wordBreak: "break-word", fontSize: activeThemeObj.bulletFontSize, fontWeight: activeThemeObj.bulletFontWeight, color: activeThemeObj.bulletColor, lineHeight: activeThemeObj.bulletLineHeight }}>{text}</span>
+                                            </div>
+                                          );
+                                        }
+                                        return (
+                                          <div key={`right-${index}`} style={{ marginBottom: "clamp(12px, 1.5vw, 20px)", fontSize: activeThemeObj.bulletFontSize, fontWeight: activeThemeObj.bulletFontWeight, color: activeThemeObj.bulletColor, lineHeight: activeThemeObj.bulletLineHeight, wordBreak: "break-word" }}>
+                                            {trimmed}
+                                          </div>
+                                        );
+                                      })}
                                     </div>
                                   </div>
                                 </div>
-                              );
-                            }
-                            
-                            // For text content, split into two columns
-                            const lines = content.split('\n').filter(line => line.trim().length > 0);
-                            const midPoint = Math.ceil(lines.length / 2);
-                            const leftColumn = lines.slice(0, midPoint);
-                            const rightColumn = lines.slice(midPoint);
-                            
-                            return (
-                              <div className={styles.layout3}>
-                                <div
-                                  ref={titleRef}
-                                  className={titleClass}
-                                  contentEditable={!isReadOnly}
-                                  suppressContentEditableWarning
-                                  role="textbox"
-                                  aria-label="Slide title"
-                                  onInput={(e) => {
-                                    e.preventDefault();
-                                    handleContentInput("title");
-                                  }}
-                                  onFocus={() => handleContentFocus("title")}
-                                  onBlur={() => handleContentBlur("title")}
-                                  style={{
-                                    ...getTextStyle("title"),
-                                    width: "100%",
-                                    marginBottom: "clamp(24px, 3vw, 40px)",
-                                  }}
-                                  data-readonly={isReadOnly}
-                                />
-                                <div className={styles.layout3Columns}>
-                                  <div className={styles.layout3Column}>
-                                    {leftColumn.map((line, index) => {
-                                      const trimmed = line.trim();
-                                      if (trimmed.startsWith('•') || trimmed.startsWith('-')) {
-                                        const text = trimmed.substring(1).trim();
-                                        return (
-                                          <div key={`left-${index}`} style={{ marginBottom: "clamp(12px, 1.5vw, 20px)", display: "flex", alignItems: "flex-start" }}>
-                                            <span style={{ marginRight: "0.75rem", fontSize: "1.5em", lineHeight: "1", marginTop: "0.1em", flexShrink: 0, fontWeight: "bold", color: activeThemeObj.titleColor }}>•</span>
-                                            <span style={{ flex: 1, wordBreak: "break-word", fontSize: activeThemeObj.bulletFontSize, fontWeight: activeThemeObj.bulletFontWeight, color: activeThemeObj.bulletColor, lineHeight: activeThemeObj.bulletLineHeight }}>{text}</span>
-                                          </div>
-                                        );
-                                      }
-                                      return (
-                                        <div key={`left-${index}`} style={{ marginBottom: "clamp(12px, 1.5vw, 20px)", fontSize: activeThemeObj.bulletFontSize, fontWeight: activeThemeObj.bulletFontWeight, color: activeThemeObj.bulletColor, lineHeight: activeThemeObj.bulletLineHeight, wordBreak: "break-word" }}>
-                                          {trimmed}
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                  <div className={styles.layout3Column}>
-                                    {rightColumn.map((line, index) => {
-                                      const trimmed = line.trim();
-                                      if (trimmed.startsWith('•') || trimmed.startsWith('-')) {
-                                        const text = trimmed.substring(1).trim();
-                                        return (
-                                          <div key={`right-${index}`} style={{ marginBottom: "clamp(12px, 1.5vw, 20px)", display: "flex", alignItems: "flex-start" }}>
-                                            <span style={{ marginRight: "0.75rem", fontSize: "1.5em", lineHeight: "1", marginTop: "0.1em", flexShrink: 0, fontWeight: "bold", color: activeThemeObj.titleColor }}>•</span>
-                                            <span style={{ flex: 1, wordBreak: "break-word", fontSize: activeThemeObj.bulletFontSize, fontWeight: activeThemeObj.bulletFontWeight, color: activeThemeObj.bulletColor, lineHeight: activeThemeObj.bulletLineHeight }}>{text}</span>
-                                          </div>
-                                        );
-                                      }
-                                      return (
-                                        <div key={`right-${index}`} style={{ marginBottom: "clamp(12px, 1.5vw, 20px)", fontSize: activeThemeObj.bulletFontSize, fontWeight: activeThemeObj.bulletFontWeight, color: activeThemeObj.bulletColor, lineHeight: activeThemeObj.bulletLineHeight, wordBreak: "break-word" }}>
-                                          {trimmed}
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-                              </div>
+                              </>
                             );
                           }
                           
                           // Layout 2: Title + Subtitle (default)
                           return (
-                            <div className={styles.layout2}>
+                            <>
+                              {/* Aramco Digital Logo in top right */}
+                              <div className={styles.themeLogoTopRight}>
+                                <img src="/aramco-digital.png" alt="Aramco Digital" />
+                              </div>
+                              <div className={styles.layout2}>
                               <div
                                 ref={titleRef}
                                 className={titleClass}
@@ -4336,6 +4359,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                             )
                           )}
                             </div>
+                            </>
                           );
                         })()
                       ) : (

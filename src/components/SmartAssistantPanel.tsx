@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useEffect } from "react";
 import {
   analyzeSlide,
   analyzePresentation,
@@ -67,26 +67,49 @@ export default function SmartAssistantPanel({
 }: SmartAssistantPanelProps) {
   const [activeTab, setActiveTab] = useState<"slide" | "presentation">("slide");
 
-  // Analyze current slide
-  const slideAnalysis = useMemo<SlideHelpResult | null>(() => {
-    if (!currentSlide) return null;
-    try {
-      return analyzeSlide(currentSlide, presentationContext);
-    } catch (error) {
-      console.error("Error analyzing slide:", error);
-      return null;
+  const [slideAnalysis, setSlideAnalysis] = useState<SlideHelpResult | null>(null);
+  const [presentationAnalysis, setPresentationAnalysis] = useState<PresentationAnalysisResult | null>(null);
+  const [isAnalyzingSlide, setIsAnalyzingSlide] = useState(false);
+  const [isAnalyzingPresentation, setIsAnalyzingPresentation] = useState(false);
+
+  // Analyze current slide with OpenAI
+  useEffect(() => {
+    if (!currentSlide) {
+      setSlideAnalysis(null);
+      return;
     }
+
+    setIsAnalyzingSlide(true);
+    analyzeSlide(currentSlide, presentationContext)
+      .then((result) => {
+        setSlideAnalysis(result);
+        setIsAnalyzingSlide(false);
+      })
+      .catch((error) => {
+        console.error("Error analyzing slide:", error);
+        setSlideAnalysis(null);
+        setIsAnalyzingSlide(false);
+      });
   }, [currentSlide, presentationContext]);
 
-  // Analyze full presentation
-  const presentationAnalysis = useMemo<PresentationAnalysisResult | null>(() => {
-    if (!allSlides || allSlides.length === 0) return null;
-    try {
-      return analyzePresentation(allSlides, presentationContext);
-    } catch (error) {
-      console.error("Error analyzing presentation:", error);
-      return null;
+  // Analyze full presentation with OpenAI
+  useEffect(() => {
+    if (!allSlides || allSlides.length === 0) {
+      setPresentationAnalysis(null);
+      return;
     }
+
+    setIsAnalyzingPresentation(true);
+    analyzePresentation(allSlides, presentationContext)
+      .then((result) => {
+        setPresentationAnalysis(result);
+        setIsAnalyzingPresentation(false);
+      })
+      .catch((error) => {
+        console.error("Error analyzing presentation:", error);
+        setPresentationAnalysis(null);
+        setIsAnalyzingPresentation(false);
+      });
   }, [allSlides, presentationContext]);
 
   // Detect language from presentationContext or currentSlide
@@ -150,12 +173,14 @@ export default function SmartAssistantPanel({
             slideAnalysis={slideAnalysis}
             currentSlide={currentSlide}
             isArabic={isArabic}
+            isAnalyzing={isAnalyzingSlide}
             onApplyToSlide={onApplyToSlide}
           />
         ) : (
           <PresentationHelpView
             presentationAnalysis={presentationAnalysis}
             isArabic={isArabic}
+            isAnalyzing={isAnalyzingPresentation}
           />
         )}
       </div>
@@ -169,11 +194,13 @@ function SlideHelpView({
   slideAnalysis,
   currentSlide,
   isArabic,
+  isAnalyzing,
   onApplyToSlide,
 }: {
   slideAnalysis: SlideHelpResult | null;
   currentSlide?: SlideContent | null;
   isArabic: boolean;
+  isAnalyzing: boolean;
   onApplyToSlide?: (data: { content?: string; notes?: string }) => void;
 }) {
   if (!currentSlide) {
@@ -321,10 +348,24 @@ function SlideHelpView({
 function PresentationHelpView({
   presentationAnalysis,
   isArabic,
+  isAnalyzing,
 }: {
   presentationAnalysis: PresentationAnalysisResult | null;
   isArabic: boolean;
+  isAnalyzing: boolean;
 }) {
+  if (isAnalyzing) {
+    return (
+      <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+        <p className="text-sm">
+          {isArabic
+            ? "جاري تحليل العرض..."
+            : "Analyzing presentation..."}
+        </p>
+      </div>
+    );
+  }
+
   if (!presentationAnalysis) {
     return (
       <div className="text-center py-8 text-gray-500 dark:text-gray-400">

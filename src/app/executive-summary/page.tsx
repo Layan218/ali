@@ -33,15 +33,18 @@ export default function ExecutiveSummaryPage() {
   const { user } = useAuth();
   const [presentations, setPresentations] = useState<PresentationRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   // Load all shared team presentations from Firestore
   useEffect(() => {
     if (!user?.uid) {
       setIsLoading(false);
+      setError(null);
       return;
     }
 
     setIsLoading(true);
+    setError(null);
 
     const presentationsRef = collection(db, "presentations");
     // Load all presentations and filter client-side for team access
@@ -52,91 +55,113 @@ export default function ExecutiveSummaryPage() {
     const unsubscribe = onSnapshot(
       allPresentationsQuery,
       async (snapshot) => {
-        const loadedPresentations: PresentationRow[] = [];
+        try {
+          const loadedPresentations: PresentationRow[] = [];
 
-        for (const docSnap of snapshot.docs) {
-          const data = docSnap.data();
-          const ownerId = data.ownerId || "";
-          const collaboratorIds = Array.isArray(data.collaboratorIds) ? data.collaboratorIds : [];
-          const teamRoles = data.teamRoles || {};
-
-          // Check if user has access (owner or collaborator)
-          const userId = user.uid;
-          if (!userId || typeof userId !== "string") {
-            continue; // Skip if user ID is invalid
-          }
-          const isOwner = ownerId === userId;
-          const hasTeamRole = teamRoles && typeof teamRoles === "object" && userId in teamRoles;
-          const isCollaborator = collaboratorIds.includes(userId) || hasTeamRole;
-          
-          if (!isOwner && !isCollaborator) {
-            continue; // Skip presentations user doesn't have access to
-          }
-
-          const updatedAt = data.updatedAt?.toDate ? data.updatedAt.toDate() : null;
-          
-          // Get owner display name
-          let ownerName = "Unknown";
-          if (ownerId) {
+          // Process all presentations with error handling
+          // If snapshot is empty, the loop won't execute and loadedPresentations will remain empty
+          for (const docSnap of snapshot.docs) {
             try {
-              const ownerRef = doc(db, "users", ownerId);
-              const ownerSnap = await getDoc(ownerRef);
-              if (ownerSnap.exists()) {
-                const ownerData = ownerSnap.data();
-                ownerName = ownerData.displayName || ownerData.email?.split("@")[0] || ownerId;
-              } else {
-                ownerName = ownerId;
+              const data = docSnap.data();
+              const ownerId = data.ownerId || "";
+              const collaboratorIds = Array.isArray(data.collaboratorIds) ? data.collaboratorIds : [];
+              const teamRoles = data.teamRoles || {};
+
+              // Check if user has access (owner or collaborator)
+              const userId = user.uid;
+              if (!userId || typeof userId !== "string") {
+                continue; // Skip if user ID is invalid
               }
-            } catch (err) {
-              ownerName = ownerId;
+              const isOwner = ownerId === userId;
+              const hasTeamRole = teamRoles && typeof teamRoles === "object" && userId in teamRoles;
+              const isCollaborator = collaboratorIds.includes(userId) || hasTeamRole;
+              
+              if (!isOwner && !isCollaborator) {
+                continue; // Skip presentations user doesn't have access to
+              }
+
+              const updatedAt = data.updatedAt?.toDate ? data.updatedAt.toDate() : null;
+              
+              // Get owner display name
+              let ownerName = "Unknown";
+              if (ownerId) {
+                try {
+                  const ownerRef = doc(db, "users", ownerId);
+                  const ownerSnap = await getDoc(ownerRef);
+                  if (ownerSnap.exists()) {
+                    const ownerData = ownerSnap.data();
+                    ownerName = ownerData.displayName || ownerData.email?.split("@")[0] || ownerId;
+                  } else {
+                    ownerName = ownerId;
+                  }
+                } catch (err) {
+                  console.warn(`Failed to fetch owner name for ${ownerId}:`, err);
+                  ownerName = ownerId;
+                }
+              }
+
+              // Count comments
+              let commentCount = 0;
+              try {
+                const commentsRef = collection(db, "presentations", docSnap.id, "comments");
+                const commentsSnap = await getDocs(commentsRef);
+                commentCount = commentsSnap.size;
+              } catch (err) {
+                console.warn(`Failed to count comments for presentation ${docSnap.id}:`, err);
+                // Continue with commentCount = 0
+              }
+
+              const lastUpdated = updatedAt
+                ? updatedAt.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
+                : "Unknown";
+
+              loadedPresentations.push({
+                id: docSnap.id,
+                title: data.title || "Untitled Presentation",
+                owner: ownerName,
+                lastUpdated,
+                status: (data.status === "final" ? "Final" : "Draft") as "Draft" | "Final",
+                comments: commentCount,
+                _updatedAt: updatedAt, // Store Date object for sorting
+              });
+            } catch (slideError) {
+              console.warn(`Error processing presentation ${docSnap.id}:`, slideError);
+              // Continue processing other presentations
             }
           }
 
-          // Count comments
-          let commentCount = 0;
-          try {
-            const commentsRef = collection(db, "presentations", docSnap.id, "comments");
-            const commentsSnap = await getDocs(commentsRef);
-            commentCount = commentsSnap.size;
-          } catch (err) {
-            // Ignore errors
-          }
-
-          const lastUpdated = updatedAt
-            ? updatedAt.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
-            : "Unknown";
-
-          loadedPresentations.push({
-            id: docSnap.id,
-            title: data.title || "Untitled Presentation",
-            owner: ownerName,
-            lastUpdated,
-            status: (data.status === "final" ? "Final" : "Draft") as "Draft" | "Final",
-            comments: commentCount,
-            _updatedAt: updatedAt, // Store Date object for sorting
+          // Sort by updatedAt descending (most recent first)
+          loadedPresentations.sort((a, b) => {
+            const aTime = (a as any)._updatedAt?.getTime() || 0;
+            const bTime = (b as any)._updatedAt?.getTime() || 0;
+            return bTime - aTime;
           });
+
+          // Remove temporary sorting field
+          const finalPresentations = loadedPresentations.map(({ _updatedAt, ...rest }) => rest);
+
+          setPresentations(finalPresentations);
+          setError(null);
+        } catch (error) {
+          console.error("Error processing presentations:", error);
+          setError(error instanceof Error ? error.message : "Failed to load presentations");
+          setPresentations([]);
+        } finally {
+          // Always call setIsLoading(false) exactly once after processing
+          setIsLoading(false);
         }
-
-        // Sort by updatedAt descending (most recent first)
-        loadedPresentations.sort((a, b) => {
-          const aTime = (a as any)._updatedAt?.getTime() || 0;
-          const bTime = (b as any)._updatedAt?.getTime() || 0;
-          return bTime - aTime;
-        });
-
-        // Remove temporary sorting field
-        const finalPresentations = loadedPresentations.map(({ _updatedAt, ...rest }) => rest);
-
-        setPresentations(finalPresentations);
-        setIsLoading(false);
       },
       (error) => {
         console.error("Failed to load presentations:", error);
+        setError(error instanceof Error ? error.message : "Failed to load presentations. Please try again.");
+        setPresentations([]);
         setIsLoading(false);
       }
     );
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+    };
   }, [user?.uid]);
 
   // Calculate stats from presentations
@@ -212,8 +237,41 @@ export default function ExecutiveSummaryPage() {
           </header>
 
           {isLoading ? (
-            <div style={{ padding: "40px 20px", textAlign: "center", color: "#5f6368" }}>
+            <div style={{ padding: "40px 20px", textAlign: "center", color: theme === "dark" ? "#cbd5e1" : "#5f6368" }}>
               Loading executive summary...
+            </div>
+          ) : error ? (
+            <div style={{ 
+              padding: "40px 20px", 
+              textAlign: "center", 
+              color: theme === "dark" ? "#ef4444" : "#dc2626",
+              backgroundColor: theme === "dark" ? "rgba(239, 68, 68, 0.1)" : "rgba(220, 38, 38, 0.1)",
+              borderRadius: "12px",
+              border: `1px solid ${theme === "dark" ? "rgba(239, 68, 68, 0.3)" : "rgba(220, 38, 38, 0.3)"}`
+            }}>
+              <p style={{ marginBottom: "12px", fontWeight: 600 }}>Error loading executive summary</p>
+              <p style={{ fontSize: "14px", opacity: 0.9 }}>{error}</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setError(null);
+                  setIsLoading(true);
+                  // Trigger re-fetch by updating user dependency
+                  window.location.reload();
+                }}
+                style={{
+                  marginTop: "16px",
+                  padding: "8px 16px",
+                  borderRadius: "8px",
+                  border: "none",
+                  background: theme === "dark" ? "#56c1b0" : "#56c1b0",
+                  color: "#ffffff",
+                  cursor: "pointer",
+                  fontWeight: 500,
+                }}
+              >
+                Retry
+              </button>
             </div>
           ) : (
             <>
@@ -234,7 +292,7 @@ export default function ExecutiveSummaryPage() {
                 </header>
                 <div className={styles.tableWrap}>
                   {presentations.length === 0 ? (
-                    <div style={{ padding: "40px 20px", textAlign: "center", color: "#5f6368" }}>
+                    <div style={{ padding: "40px 20px", textAlign: "center", color: theme === "dark" ? "#cbd5e1" : "#5f6368" }}>
                       No presentations available. Create a presentation to see it here.
                     </div>
                   ) : (

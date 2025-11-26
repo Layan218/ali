@@ -25,9 +25,11 @@ export interface AIPresentationRequest {
 
 export interface AIPresentationSlide {
   title: string;
-  bullets: string[]; // 3-5 bullet points
+  bullets: string[]; // 4-6 detailed bullet points for professional presentations
   notes?: string; // Optional speaker notes
   layout?: "title-only" | "title-bullets" | "title-two-column";
+  imagePrompt?: string; // Suggested illustration description for the slide
+  needsImage?: boolean; // Whether this slide should have an image
 }
 
 export interface AIGenerationProgress {
@@ -38,6 +40,7 @@ export interface AIGenerationProgress {
 
 /**
  * Generates a complete presentation based on user requirements.
+ * Uses OpenAI API if available, falls back to local generation if API fails.
  * 
  * @param request - User's presentation requirements
  * @param onProgress - Optional callback for progress updates
@@ -61,118 +64,82 @@ export async function generatePresentation(
       onProgress({
         currentSlide: 0,
         totalSlides: slideCount,
-        message: `Analyzing topic: ${topic}...`,
+        message: `Connecting to AI service...`,
       });
     }
 
-    // Analyze topic to extract keywords and category
-    const topicAnalysis = analyzeTopic(topic);
-    
-    // Generate slides based on structure
-    const slides: AIPresentationSlide[] = [];
-    
-    // Slide 1: Title slide
-    if (onProgress) {
-      onProgress({
-        currentSlide: 1,
-        totalSlides: slideCount,
-        message: `Generating slide 1 of ${slideCount}: Title slide...`,
-      });
-    }
-    
-    slides.push(generateTitleSlide(topic, goal, audience, tone, language, topicAnalysis));
-
-    if (slideCount <= 1) {
-      return slides;
-    }
-
-    // Slide 2: Introduction/Overview
-    if (onProgress) {
-      onProgress({
-        currentSlide: 2,
-        totalSlides: slideCount,
-        message: `Generating slide 2 of ${slideCount}: Introduction...`,
-      });
-    }
-    
-    slides.push(generateIntroductionSlide(topic, goal, audience, tone, language, topicAnalysis));
-
-    if (slideCount <= 2) {
-      return slides;
-    }
-
-    // Determine slide structure based on goal
-    const structure = getSlideStructure(goal, slideCount - 2, language, topicAnalysis.category); // Excluding title and intro
-
-    // Generate content slides
-    for (let i = 0; i < structure.length; i++) {
-      const slideType = structure[i];
-      const slideNumber = i + 3; // +3 because we have title (1) and intro (2)
-      
+    // Try OpenAI API first
+    try {
       if (onProgress) {
         onProgress({
-          currentSlide: slideNumber,
+          currentSlide: 0,
           totalSlides: slideCount,
-          message: `Generating slide ${slideNumber} of ${slideCount}: ${slideType}...`,
+          message: `Generating presentation with AI...`,
         });
       }
 
-      const slide = generateContentSlide(
-        topic,
-        slideType,
-        goal,
-        audience,
-        tone,
-        language,
-        topicAnalysis,
-        i,
-        structure.length
-      );
-      
-      slides.push(slide);
-    }
-
-    // Ensure we have exactly the requested number of slides
-    if (slides.length > slideCount) {
-      slides.splice(slideCount);
-    } else if (slides.length < slideCount) {
-      // Add additional content slides if needed
-      const additionalNeeded = slideCount - slides.length;
-      for (let i = 0; i < additionalNeeded; i++) {
-        const slideNumber = slides.length + 1;
-        if (onProgress) {
-          onProgress({
-            currentSlide: slideNumber,
-            totalSlides: slideCount,
-            message: `Generating slide ${slideNumber} of ${slideCount}: Additional content...`,
-          });
-        }
-        
-        slides.push(generateContentSlide(
+      const response = await fetch("/api/openai/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
           topic,
-          "Key Points",
           goal,
           audience,
           tone,
           language,
-          topicAnalysis,
-          slides.length - 2,
-          additionalNeeded
-        ));
-      }
-    }
-
-    // Final progress update
-    if (onProgress) {
-      onProgress({
-        currentSlide: slideCount,
-        totalSlides: slideCount,
-        message: `Completed! Generated ${slideCount} slides.`,
+          slideCount,
+        }),
       });
-    }
 
-    console.log(`[AI Service] Successfully generated ${slides.length} slides for topic: "${topic}"`);
-    return slides;
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      if (data.slides && Array.isArray(data.slides) && data.slides.length > 0) {
+        // Final progress update
+        if (onProgress) {
+          onProgress({
+            currentSlide: slideCount,
+            totalSlides: slideCount,
+            message: `Completed! Generated ${data.slides.length} slides.`,
+          });
+        }
+
+        console.log(`[AI Service] Successfully generated ${data.slides.length} slides using OpenAI for topic: "${topic}"`);
+        console.log(`[AI Service] Recommended theme: ${data.recommendedTheme || "default"}`);
+        console.log(`[AI Service] Presentation structure: ${data.presentationStructure || "standard"}`);
+        
+        // Store recommended theme and structure for use in presentation creation
+        // Attach metadata to all slides for easy access
+        const slidesWithMetadata = data.slides.map((slide: any) => ({
+          ...slide,
+          _recommendedTheme: data.recommendedTheme || "default",
+          _presentationStructure: data.presentationStructure || "",
+        }));
+        
+        return slidesWithMetadata as AIPresentationSlide[];
+      } else {
+        throw new Error("Invalid response format from OpenAI API");
+      }
+    } catch (apiError: any) {
+      console.warn("[AI Service] OpenAI API failed, falling back to local generation:", apiError);
+      
+      // Fall back to local generation
+      if (onProgress) {
+        onProgress({
+          currentSlide: 0,
+          totalSlides: slideCount,
+          message: `Using local AI generator...`,
+        });
+      }
+
+      return generateLocalPresentation(request, onProgress);
+    }
 
   } catch (error) {
     console.error("[AI Service] Error generating presentation:", error);
@@ -180,6 +147,140 @@ export async function generatePresentation(
     // Return safe fallback slides
     return generateFallbackSlides(request);
   }
+}
+
+/**
+ * Local presentation generation (fallback when OpenAI API is unavailable)
+ */
+function generateLocalPresentation(
+  request: AIPresentationRequest,
+  onProgress?: (progress: AIGenerationProgress) => void
+): AIPresentationSlide[] {
+  // Validate and normalize inputs
+  const topic = request.topic.trim() || "Untitled Presentation";
+  const goal = request.goal?.trim().toLowerCase() || "inform";
+  const audience = request.audience?.trim() || "General audience";
+  const tone = request.tone || "formal";
+  const language = request.language || "en";
+  const slideCount = Math.max(1, Math.min(20, request.slideCount || 6));
+
+  // Report initial progress
+  if (onProgress) {
+    onProgress({
+      currentSlide: 0,
+      totalSlides: slideCount,
+      message: `Analyzing topic: ${topic}...`,
+    });
+  }
+
+  // Analyze topic to extract keywords and category
+  const topicAnalysis = analyzeTopic(topic);
+  
+  // Generate slides based on structure
+  const slides: AIPresentationSlide[] = [];
+  
+  // Slide 1: Title slide
+  if (onProgress) {
+    onProgress({
+      currentSlide: 1,
+      totalSlides: slideCount,
+      message: `Generating slide 1 of ${slideCount}: Title slide...`,
+    });
+  }
+  
+  slides.push(generateTitleSlide(topic, goal, audience, tone, language, topicAnalysis));
+
+  if (slideCount <= 1) {
+    return slides;
+  }
+
+  // Slide 2: Introduction/Overview
+  if (onProgress) {
+    onProgress({
+      currentSlide: 2,
+      totalSlides: slideCount,
+      message: `Generating slide 2 of ${slideCount}: Introduction...`,
+    });
+  }
+  
+  slides.push(generateIntroductionSlide(topic, goal, audience, tone, language, topicAnalysis));
+
+  if (slideCount <= 2) {
+    return slides;
+  }
+
+  // Determine slide structure based on goal
+  const structure = getSlideStructure(goal, slideCount - 2, language, topicAnalysis.category); // Excluding title and intro
+
+  // Generate content slides
+  for (let i = 0; i < structure.length; i++) {
+    const slideType = structure[i];
+    const slideNumber = i + 3; // +3 because we have title (1) and intro (2)
+    
+    if (onProgress) {
+      onProgress({
+        currentSlide: slideNumber,
+        totalSlides: slideCount,
+        message: `Generating slide ${slideNumber} of ${slideCount}: ${slideType}...`,
+      });
+    }
+
+    const slide = generateContentSlide(
+      topic,
+      slideType,
+      goal,
+      audience,
+      tone,
+      language,
+      topicAnalysis,
+      i,
+      structure.length
+    );
+    
+    slides.push(slide);
+  }
+
+  // Ensure we have exactly the requested number of slides
+  if (slides.length > slideCount) {
+    slides.splice(slideCount);
+  } else if (slides.length < slideCount) {
+    // Add additional content slides if needed
+    const additionalNeeded = slideCount - slides.length;
+    for (let i = 0; i < additionalNeeded; i++) {
+      const slideNumber = slides.length + 1;
+      if (onProgress) {
+        onProgress({
+          currentSlide: slideNumber,
+          totalSlides: slideCount,
+          message: `Generating slide ${slideNumber} of ${slideCount}: Additional content...`,
+        });
+      }
+      
+      slides.push(generateContentSlide(
+        topic,
+        "Key Points",
+        goal,
+        audience,
+        tone,
+        language,
+        topicAnalysis,
+        slides.length - 2,
+        additionalNeeded
+      ));
+    }
+  }
+
+  // Final progress update
+  if (onProgress) {
+    onProgress({
+      currentSlide: slideCount,
+      totalSlides: slideCount,
+      message: `Completed! Generated ${slideCount} slides.`,
+    });
+  }
+
+  console.log(`[AI Service] Successfully generated ${slides.length} slides locally for topic: "${topic}"`);
+  return slides;
 }
 
 /**

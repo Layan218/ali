@@ -46,9 +46,9 @@ export const presentationThemes: Record<ThemeId, PresentationTheme> = {
   default: {
     id: "default",
     name: "Default",
-    slideBackground: "#ffffff",
-    accentColor: "#6366f1",
-    textColor: "#1e293b",
+    slideBackground: "linear-gradient(135deg, #e0f2fe 0%, #ecfdf5 100%)", // Aramco Digital soft background
+    accentColor: "#56c1b0", // Aramco Digital teal
+    textColor: "#0f172a", // Dark text for readability
     slideLayouts: {
       cover: "defaultCoverSlide",
       content: "defaultContentSlide",
@@ -56,19 +56,22 @@ export const presentationThemes: Record<ThemeId, PresentationTheme> = {
     },
     titleFontSize: "clamp(32px, 3.5vw, 48px)",
     titleFontWeight: 600,
-    titleColor: "#1e293b",
+    titleColor: "#0f172a",
     titleLineHeight: 1.2,
     bulletFontSize: "clamp(16px, 1.8vw, 20px)",
     bulletFontWeight: 400,
-    bulletColor: "#1e293b",
+    bulletColor: "#0f172a",
     bulletLineHeight: 1.6,
-    buttonPrimaryBg: "#6366f1",
+    buttonPrimaryBg: "#56c1b0", // Aramco Digital teal
     buttonPrimaryColor: "#ffffff",
-    buttonPrimaryHover: "#4f46e5",
+    buttonPrimaryHover: "#4fb3a3",
     buttonSecondaryBg: "transparent",
-    buttonSecondaryColor: "#6366f1",
-    buttonSecondaryBorder: "#6366f1",
-    swatch: "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)",
+    buttonSecondaryColor: "#56c1b0",
+    buttonSecondaryBorder: "#56c1b0",
+    swatch: "linear-gradient(135deg, #56c1b0 0%, #0e8170 100%)", // Aramco Digital gradient
+    canvasBg: "rgba(255, 255, 255, 0.95)", // Soft white with transparency
+    canvasBorder: "1px solid rgba(86, 193, 176, 0.2)", // Soft teal border
+    canvasShadow: "0 18px 36px rgba(15, 23, 42, 0.12)", // Soft shadow like Aramco Digital cards
   },
   scdt: {
     id: "scdt",
