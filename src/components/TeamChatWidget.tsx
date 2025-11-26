@@ -34,6 +34,8 @@ type TeamChatWidgetProps = {
   canChat?: boolean;
   teamRoles?: Record<string, "owner" | "editor" | "viewer">;
   ownerId?: string | null;
+  currentUserId?: string | null;
+  currentUserEmail?: string | null;
 };
 
 export default function TeamChatWidget({
@@ -41,6 +43,8 @@ export default function TeamChatWidget({
   canChat = false,
   teamRoles = {},
   ownerId = null,
+  currentUserId = null,
+  currentUserEmail = null,
 }: TeamChatWidgetProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -51,6 +55,9 @@ export default function TeamChatWidget({
   const isOpenRef = useRef(isOpen);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const messageCountRef = useRef(0);
+
+  // Memoize teamRoles string to prevent unnecessary re-renders
+  const teamRolesString = useMemo(() => JSON.stringify(teamRoles), [teamRoles]);
 
   useEffect(() => {
     isOpenRef.current = isOpen;
@@ -67,18 +74,31 @@ export default function TeamChatWidget({
   }, [messages, scrollToBottom]);
 
   useEffect(() => {
+
     if (!presentationId) {
-      setMessages([]);
-      setAccessMessage("Select a presentation to start chatting.");
-      setUnreadCount(0);
+      setMessages((prev) => prev.length > 0 ? [] : prev);
+      setAccessMessage((prev) => prev !== "Select a presentation to start chatting." 
+        ? "Select a presentation to start chatting." 
+        : prev);
+      setUnreadCount((prev) => prev > 0 ? 0 : prev);
       messageCountRef.current = 0;
       return;
     }
 
-    if (!canChat) {
-      setMessages([]);
-      setAccessMessage("You are not part of this project team.");
-      setUnreadCount(0);
+    // Check if user is in teamRoles
+    const isOwner = currentUserEmail && teamRoles?.[currentUserEmail.toLowerCase()] === "owner";
+    const isEditor = currentUserEmail && teamRoles?.[currentUserEmail.toLowerCase()] === "editor";
+    const isViewer = currentUserEmail && teamRoles?.[currentUserEmail.toLowerCase()] === "viewer";
+    const isOwnerById = currentUserId && ownerId && currentUserId === ownerId;
+    const isInTeamRoles = Boolean(isOwner || isEditor || isViewer);
+    const canUseChat = canChat || isInTeamRoles || isOwnerById;
+
+    if (!canUseChat) {
+      setMessages((prev) => prev.length > 0 ? [] : prev);
+      setAccessMessage((prev) => prev !== "You are not a member of this presentation team."
+        ? "You are not a member of this presentation team."
+        : prev);
+      setUnreadCount((prev) => prev > 0 ? 0 : prev);
       messageCountRef.current = 0;
       return;
     }
@@ -113,9 +133,39 @@ export default function TeamChatWidget({
           if (createdAt.getTime() < nowMs - 24 * 60 * 60 * 1000) {
             return;
           }
+          // Chat messages are stored as plain text (no encryption)
+          // For backward compatibility, try to decrypt if it looks encrypted, otherwise use as-is
           const rawText = typeof data.text === "string" ? data.text : "";
-          const decrypted = rawText ? decryptText(rawText) : "";
-          const body = decrypted || rawText || "";
+          let body = rawText || "";
+          if (rawText) {
+            // Check if text looks encrypted
+            const looksEncrypted = rawText.startsWith("U2FsdGVk");
+            
+            if (looksEncrypted) {
+              // Old encrypted message - try to decrypt for backward compatibility
+              try {
+                const decrypted = decryptText(rawText);
+                // Check if decryption actually succeeded
+                // decryptText returns the original cipher if decryption fails
+                const decryptionSucceeded = decrypted && 
+                                          decrypted !== rawText && 
+                                          !decrypted.startsWith("U2FsdGVk") && 
+                                          decrypted.length > 0 &&
+                                          decrypted.length < rawText.length; // Decrypted should be shorter
+                
+                if (decryptionSucceeded) {
+                  body = decrypted;
+                } else {
+                  // Decryption failed - show a simple message instead of encrypted string
+                  body = "[Old encrypted message - please resend]";
+                }
+              } catch (error) {
+                // Decryption failed - show simple message
+                body = "[Old encrypted message - please resend]";
+              }
+            }
+            // If not encrypted, body is already set to rawText above
+          }
 
           const authorName = typeof data.userName === "string" ? data.userName : "Team member";
           const messageUserId = typeof data.userId === "string" ? data.userId : null;
@@ -143,18 +193,20 @@ export default function TeamChatWidget({
         if (!isOpenRef.current && filtered.length > previousCount) {
           setUnreadCount((count) => count + (filtered.length - previousCount));
         }
-        setAccessMessage(null);
+        setAccessMessage((prev) => prev !== null ? null : prev);
       },
       (error) => {
         console.error("Failed to subscribe to chat messages:", error);
-        setAccessMessage("Unable to load chat messages.");
+        setAccessMessage((prev) => prev !== "Unable to load chat messages."
+          ? "Unable to load chat messages."
+          : prev);
       }
     );
 
     return () => {
       unsubscribe();
     };
-  }, [presentationId, canChat]);
+  }, [presentationId, canChat, teamRolesString, currentUserId, currentUserEmail, ownerId]);
 
   const toggleWidget = () => {
     setIsOpen((open) => {
@@ -173,19 +225,35 @@ export default function TeamChatWidget({
     if (!presentationId) {
       return "Select a presentation to start chatting.";
     }
-    if (!canChat) {
-      return accessMessage ?? "You are not part of this project team.";
+    // Check if user is in teamRoles
+    const isOwner = currentUserEmail && teamRoles?.[currentUserEmail.toLowerCase()] === "owner";
+    const isEditor = currentUserEmail && teamRoles?.[currentUserEmail.toLowerCase()] === "editor";
+    const isViewer = currentUserEmail && teamRoles?.[currentUserEmail.toLowerCase()] === "viewer";
+    const isOwnerById = currentUserId && ownerId && currentUserId === ownerId;
+    const isInTeamRoles = Boolean(isOwner || isEditor || isViewer);
+    const canUseChat = canChat || isInTeamRoles || isOwnerById;
+    
+    if (!canUseChat) {
+      return accessMessage ?? "You are not a member of this presentation team.";
     }
     if (accessMessage) {
       return accessMessage;
     }
     return "Connected to project chat";
-  }, [presentationId, canChat, accessMessage]);
+  }, [presentationId, canChat, accessMessage, teamRoles, currentUserId, currentUserEmail, ownerId]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!presentationId || !canChat) {
-      setAccessMessage("You are not part of this project team.");
+    // Check if user is in teamRoles
+    const isOwner = currentUserEmail && teamRoles?.[currentUserEmail.toLowerCase()] === "owner";
+    const isEditor = currentUserEmail && teamRoles?.[currentUserEmail.toLowerCase()] === "editor";
+    const isViewer = currentUserEmail && teamRoles?.[currentUserEmail.toLowerCase()] === "viewer";
+    const isOwnerById = currentUserId && ownerId && currentUserId === ownerId;
+    const isInTeamRoles = Boolean(isOwner || isEditor || isViewer);
+    const canUseChat = canChat || isInTeamRoles || isOwnerById;
+    
+    if (!presentationId || !canUseChat) {
+      setAccessMessage("You are not a member of this presentation team.");
       return;
     }
     if (!draft.trim()) return;
@@ -211,12 +279,12 @@ export default function TeamChatWidget({
         console.warn("Failed to fetch user displayName:", err);
       }
       
-      const encryptedText = encryptText(draft.trim());
+      // Save chat messages as plain text (no encryption needed for chat)
       const chatRef = collection(db, "presentations", presentationId, "chatMessages");
       const messageDoc = await addDoc(chatRef, {
         userId: currentUser.uid,
         userName: displayName,
-        text: encryptedText,
+        text: draft.trim(), // Save as plain text
         createdAt: serverTimestamp(),
       });
 

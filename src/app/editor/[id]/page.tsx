@@ -23,6 +23,7 @@ import { encryptText, decryptText } from "@/lib/encryption";
 import { logAuditEvent } from "@/lib/audit";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/hooks/useTheme";
+import { useUndoRedo } from "@/hooks/useUndoRedo";
 import TeamChatWidget from "@/components/TeamChatWidget";
 import SmartAssistantPanel from "@/components/SmartAssistantPanel";
 import type { SlideContent, PresentationContext } from "@/services/smartAssistantService";
@@ -35,6 +36,39 @@ import {
 } from "@/lib/presentationMeta";
 import { AITemplateConfig, getAITemplateStyles } from "@/lib/aiTemplate";
 import { presentationThemes, getThemeByName, type PresentationTheme } from "@/lib/presentationThemes";
+import type {
+  FieldKey,
+  AlignOption,
+  SlideFormatting,
+  SlideData,
+  VersionSnapshotSlide,
+  PresentationVersion,
+  ThemeOption,
+  SlideSnapshot,
+  CommentItem,
+  CommandState,
+} from "@/types/editor";
+import {
+  formatTitleFromId,
+  placeholderMap,
+  fieldKeyMap,
+  DEFAULT_THEME,
+  themes,
+  INITIAL_THEME,
+} from "@/utils/slideUtils";
+import {
+  DEFAULT_FORMATTING,
+  createDefaultFormatting,
+  ensureFormatting,
+  fontFamilies,
+  fontSizes,
+  lineSpacingOptions,
+  colorOptions,
+  highlightOptions,
+  FONT_SIZE_TO_COMMAND,
+  COMMAND_TO_FONT_SIZE,
+  formattingButtons,
+} from "@/utils/formattingUtils";
 
 const VIEWER_RETURN_KEY = "viewer-return-url";
 const VIEWER_STATE_KEY = "viewer-state";
@@ -42,183 +76,6 @@ const VIEWER_STATE_KEY = "viewer-state";
 const cx = (...classes: Array<string | false | null | undefined>) =>
   classes.filter(Boolean).join(" ");
 
-type AlignOption = "left" | "center" | "right";
-
-type SlideFormatting = Record<FieldKey, { lineHeight: number }>;
-
-type SlideData = {
-  id: string;
-  order?: number;
-  title: string;
-  subtitle: string;
-  content?: string; // For AI template slides
-  notes: string;
-  theme: string;
-  slideType?: "cover" | "content" | "ending"; // SCDT slide type
-  templateId?: string; // AI template identifier
-  formatting: SlideFormatting;
-};
-
-type VersionSnapshotSlide = {
-  slideId: string;
-  order: number;
-  title: string;
-  encryptedContent: string;
-  encryptedNotes: string;
-  theme: string;
-  slideType?: "cover" | "content" | "ending";
-};
-
-type PresentationVersion = {
-  id: string;
-  createdAt: Date | null;
-  createdBy: string | null;
-  summary: string;
-  slidesSnapshot: VersionSnapshotSlide[];
-};
-
-type ThemeOption = {
-  name: string;
-  swatch: string;
-};
-
-type FieldKey = "title" | "subtitle" | "notes";
-
-type CommentItem = {
-  id: string;
-  author: string;
-  message: string;
-  timestamp: string;
-};
-
-type CommandState = {
-  fontFamily: string;
-  fontSize: number;
-  bold: boolean;
-  italic: boolean;
-  underline: boolean;
-  color: string;
-  highlight: string;
-  align: AlignOption;
-  listType: "none" | "bullet" | "number";
-};
-
-const formattingButtons = ["Undo", "Redo", "Image", "Background", "Layout", "Theme", "Transition", "AI Assistant"] as const;
-const fontFamilies = ["Calibri", "Arial", "Roboto"];
-const fontSizes = [12, 14, 18, 24, 32, 40];
-const lineSpacingOptions = [1, 1.15, 1.5, 2];
-
-const colorOptions = [
-  { name: "Default", value: "#202124" },
-  { name: "Teal", value: "#56c1b0" },
-  { name: "Slate", value: "#1e293b" },
-  { name: "Cloud", value: "#9ca3af" },
-];
-
-const highlightOptions = [
-  { name: "None", value: "transparent" },
-  { name: "Teal", value: "rgba(86, 193, 176, 0.25)" },
-  { name: "Sunrise", value: "rgba(250, 204, 21, 0.3)" },
-  { name: "Slate", value: "rgba(148, 163, 184, 0.28)" },
-];
-
-const FONT_SIZE_TO_COMMAND: Record<number, string> = {
-  12: "2",
-  14: "3",
-  18: "4",
-  24: "5",
-  32: "6",
-  40: "7",
-};
-
-const COMMAND_TO_FONT_SIZE: Record<string, number> = {
-  "1": 12,
-  "2": 12,
-  "3": 14,
-  "4": 18,
-  "5": 24,
-  "6": 32,
-  "7": 40,
-};
-
-const placeholderMap: Record<FieldKey, string> = {
-  title: "Click to add title",
-  subtitle: "Click to add subtitle",
-  notes: "",
-};
-
-const DEFAULT_THEME = "SCDT";
-
-const DEFAULT_FORMATTING: SlideFormatting = {
-  title: { lineHeight: 1.2 },
-  subtitle: { lineHeight: 1.3 },
-  notes: { lineHeight: 1.4 },
-};
-
-const createDefaultFormatting = (): SlideFormatting => ({
-  title: { lineHeight: DEFAULT_FORMATTING.title.lineHeight },
-  subtitle: { lineHeight: DEFAULT_FORMATTING.subtitle.lineHeight },
-  notes: { lineHeight: DEFAULT_FORMATTING.notes.lineHeight },
-});
-
-const ensureFormatting = (formatting?: SlideFormatting): SlideFormatting => ({
-  title: { lineHeight: formatting?.title?.lineHeight ?? DEFAULT_FORMATTING.title.lineHeight },
-  subtitle: { lineHeight: formatting?.subtitle?.lineHeight ?? DEFAULT_FORMATTING.subtitle.lineHeight },
-  notes: { lineHeight: formatting?.notes?.lineHeight ?? DEFAULT_FORMATTING.notes.lineHeight },
-});
-
-const fieldKeyMap: Record<FieldKey, keyof SlideData> = {
-  title: "title",
-  subtitle: "subtitle",
-  notes: "notes",
-};
-
-const themes: ThemeOption[] = [
-  { name: "SCDT", swatch: "linear-gradient(135deg, #1b3a4b 0%, #00b388 100%)" },
-];
-
-const INITIAL_THEME = themes[0]?.name ?? DEFAULT_THEME;
-
-function formatTitleFromId(id: string) {
-  if (!id) return "Untitled presentation";
-  return id
-    .split("-")
-    .map((chunk) => chunk.charAt(0).toUpperCase() + chunk.slice(1))
-    .join(" ");
-}
-
-const initialSlides: SlideData[] = [
-  {
-    id: "slide-1",
-    order: 1,
-    title: placeholderMap.title,
-    subtitle: placeholderMap.subtitle,
-    notes: "",
-    theme: INITIAL_THEME,
-    slideType: "cover",
-    formatting: createDefaultFormatting(),
-  },
-  {
-    id: "slide-2",
-    order: 2,
-    title: placeholderMap.title,
-    subtitle: placeholderMap.subtitle,
-    notes: "",
-    theme: INITIAL_THEME,
-    slideType: "content",
-    formatting: createDefaultFormatting(),
-  },
-  {
-    id: "slide-3",
-    order: 3,
-    title: placeholderMap.title,
-    subtitle: placeholderMap.subtitle,
-    notes: "",
-    theme: INITIAL_THEME,
-    slideType: "ending",
-    formatting: createDefaultFormatting(),
-  },
-];
 
 export default function EditorPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -226,12 +83,14 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   const { user, loading } = useAuth();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const presentationId = searchParams.get("presentationId");
+  // Get presentationId from path parameter [id], with fallback to query param for backward compatibility
+  const presentationId = resolvedParams.id || searchParams.get("presentationId");
   const { theme, toggleTheme, mounted } = useTheme();
   const isDark = mounted && theme === "dark";
   const [presentationTitle, setPresentationTitle] = useState(() => formatTitleFromId(resolvedParams.id));
-  const [slides, setSlides] = useState<SlideData[]>(initialSlides);
-  const [selectedSlideId, setSelectedSlideId] = useState(initialSlides[0].id);
+  const [slides, setSlides] = useState<SlideData[]>([]);
+  const [isLoadingSlides, setIsLoadingSlides] = useState(true);
+  const [selectedSlideId, setSelectedSlideId] = useState<string>("");
   const [status, setStatus] = useState<"draft" | "final">("draft");
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [statusToastVariant, setStatusToastVariant] = useState<"draft" | "final" | null>(null);
@@ -261,7 +120,15 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   const [speakerNotes, setSpeakerNotes] = useState<string>("");
   const [isVoiceRecording, setIsVoiceRecording] = useState(false);
   const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [presentationTheme, setPresentationTheme] = useState<string | null>(null);
+  const [presentationBackground, setPresentationBackground] = useState<"default" | "soft" | "dark">("default");
+  const [isImageModalOpen, setIsImageModalOpen] = useState(false);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string>("");
+  const [isBackgroundModalOpen, setIsBackgroundModalOpen] = useState(false);
+  const [isLayoutModalOpen, setIsLayoutModalOpen] = useState(false);
   const recognitionRef = useRef<any>(null);
+  const isRecordingRef = useRef<boolean>(false);
   const storageKey = useMemo(() => `presentation-${resolvedParams.id}-slides`, [resolvedParams.id]);
   const storedUserRecord = useMemo(
     () => (user && typeof user === "object" ? (user as Record<string, unknown>) : null),
@@ -290,20 +157,86 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   });
 
   const selectedSlide = useMemo(
-    () => slides.find((slide) => slide.id === selectedSlideId) ?? slides[0],
+    () => {
+      if (slides.length === 0) return undefined;
+      return slides.find((slide) => slide.id === selectedSlideId) ?? slides[0];
+    },
     [selectedSlideId, slides]
   );
-  const selectedThemeName = selectedSlide?.theme ?? themes[0]?.name ?? DEFAULT_THEME;
-  const activeThemeObj = getThemeByName(selectedThemeName) || presentationThemes["scdt"];
-  const activeTheme = activeThemeObj?.id || selectedThemeName; // Use theme ID for comparison
-  const currentSlideIndex = slides.findIndex((slide) => slide.id === selectedSlideId);
+
+  // Undo/Redo hook (must be after selectedSlide is defined)
+  const {
+    undo: applyUndo,
+    redo: applyRedo,
+    captureSnapshotDebounced,
+    captureSnapshotImmediate,
+    captureSnapshotOnSlideChange,
+  } = useUndoRedo({
+    titleRef,
+    subtitleRef,
+    notesRef,
+    selectedSlide,
+    selectedSlideId,
+    setSlides,
+  });
+
+  // Effective theme: presentation theme takes priority (when set), then slide theme, then default
+  // This ensures theme changes apply immediately
+  // IMPORTANT: Check presentationTheme first - if it's not null/undefined, use it (even if empty string)
+  const effectiveThemeName = presentationTheme !== null && presentationTheme !== undefined
+    ? presentationTheme
+    : (selectedSlide?.theme || themes[0]?.name || DEFAULT_THEME);
+  
+  // Get theme object - this must match the theme name exactly
+  const activeThemeObj = getThemeByName(effectiveThemeName) || presentationThemes["default"];
+  const activeTheme = activeThemeObj?.id || effectiveThemeName; // Use theme ID for comparison
+  
+  const currentSlideIndex = selectedSlide ? slides.findIndex((slide) => slide.id === selectedSlideId) : -1;
   const isFirstSlide = currentSlideIndex <= 0;
   const isLastSlide = currentSlideIndex === slides.length - 1;
-  const isSCDT = activeTheme === "scdt" || selectedThemeName === "SCDT";
+  
+  // Check theme by both ID and name to ensure we catch all variations
+  const isSCDT = activeTheme === "scdt" || effectiveThemeName === "SCDT" || activeThemeObj?.name === "SCDT";
+  const isDigitalSolutions = activeTheme === "digital-solutions" || effectiveThemeName === "Digital Solutions" || activeThemeObj?.name === "Digital Solutions";
+  const isAramcoClassic = activeTheme === "aramco-classic" || effectiveThemeName === "Aramco Classic" || activeThemeObj?.name === "Aramco Classic";
+  
   const slideType = selectedSlide?.slideType || (isFirstSlide ? "cover" : isLastSlide ? "ending" : "content");
-  const isSCDTCover = isSCDT && slideType === "cover";
-  const isSCDTContent = isSCDT && slideType === "content";
-  const isSCDTEnding = isSCDT && slideType === "ending";
+  
+  // Get the CSS class name for the current theme and slide type
+  // This will be used to apply the theme-specific CSS class
+  const themeSlideClass = activeThemeObj?.slideLayouts?.[slideType] || "";
+  
+  // Debug: Log theme changes to help diagnose issues
+  // Use stable values from activeThemeObj instead of the object itself
+  const activeThemeObjName = activeThemeObj?.name;
+  const activeThemeObjId = activeThemeObj?.id;
+  const slideTypeFromTheme = activeThemeObj?.slideLayouts?.[slideType];
+  const selectedSlideTheme = selectedSlide?.theme;
+  
+  useEffect(() => {
+    console.log("🔍 Theme Debug:", {
+      presentationTheme,
+      selectedSlideTheme,
+      effectiveThemeName,
+      activeTheme,
+      activeThemeObjName,
+      activeThemeObjId,
+      themeSlideClass,
+      isSCDT,
+      isDigitalSolutions,
+      isAramcoClassic,
+      slideType,
+      slideTypeFromTheme
+    });
+  }, [presentationTheme, selectedSlideTheme, effectiveThemeName, activeTheme, activeThemeObjName, activeThemeObjId, themeSlideClass, isSCDT, isDigitalSolutions, isAramcoClassic, slideType, slideTypeFromTheme]);
+  // Use presentation-level background for all slides
+  const background = presentationBackground;
+  const backgroundClass =
+    background === "soft"
+      ? styles.softBackground
+      : background === "dark"
+      ? styles.darkBackground
+      : styles.defaultBackground;
   const canDeleteSlide = slides.length > 1;
 
   // Smart Assistant: Build SlideContent for current slide
@@ -407,11 +340,18 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
       try {
       // Load presentation document
       const presentationRef = doc(db, "presentations", presentationId);
-      const presentationSnap = await getDoc(presentationRef);
+      let presentationSnap;
+      try {
+        presentationSnap = await getDoc(presentationRef);
+      } catch (error) {
+        console.error("Firestore error (getDoc presentation):", error);
+        throw error;
+      }
       
       if (!presentationSnap.exists()) {
         console.warn("Presentation not found in Firestore");
         setIsLoadingFromFirestore(false);
+        setIsLoadingSlides(false);
         setPresentationOwnerId(null);
         setPresentationCollaboratorIds([]);
         return;
@@ -421,8 +361,26 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
       if (presentationData?.title) {
         setPresentationTitle(presentationData.title);
       }
+      // Set presentation theme from Firestore (only on initial load, not if user has already selected one)
+      // IMPORTANT: Only set if presentationTheme is currently null (initial state)
+      // This prevents overriding user's theme selection
+      if (presentationData?.theme && typeof presentationData.theme === "string") {
+        setPresentationTheme((prev) => {
+          // Only set if prev is null (initial load), otherwise keep user's selection
+          if (prev === null) {
+            return presentationData.theme;
+          }
+          return prev; // Keep user's selection
+        });
+      }
       if (presentationData?.status === "final" || presentationData?.status === "draft") {
         setStatus(presentationData.status);
+      }
+      // Load presentation background
+      if (presentationData?.background && typeof presentationData.background === "string") {
+        if (presentationData.background === "default" || presentationData.background === "soft" || presentationData.background === "dark") {
+          setPresentationBackground(presentationData.background);
+        }
       }
       const ownerId =
         presentationData && typeof presentationData.ownerId === "string" ? presentationData.ownerId : null;
@@ -439,12 +397,32 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         const roles: Record<string, "owner" | "editor" | "viewer"> = {};
         for (const [key, value] of Object.entries(rolesRaw)) {
           if (value === "owner" || value === "editor" || value === "viewer") {
-            roles[key] = value;
+            roles[key.toLowerCase()] = value;
           }
+        }
+        // Ensure owner is included in teamRoles
+        if (presentationOwnerId) {
+          const ownerKey = presentationOwnerId.toLowerCase();
+          roles[ownerKey] = "owner";
         }
         setTeamRoles(roles);
       } else {
-        setTeamRoles({});
+        // Initialize with owner if no roles exist
+        const roles: Record<string, "owner" | "editor" | "viewer"> = {};
+        if (presentationOwnerId) {
+          const ownerKey = presentationOwnerId.toLowerCase();
+          roles[ownerKey] = "owner";
+        }
+        setTeamRoles(roles);
+        // Save initial teamRoles to Firestore if it doesn't exist
+        if (presentationId && presentationOwnerId) {
+          const ownerKey = presentationOwnerId.toLowerCase();
+          void setDoc(
+            doc(db, "presentations", presentationId),
+            { teamRoles: { [ownerKey]: "owner" } },
+            { merge: true }
+          );
+        }
       }
 
       // Fetch display names for owner and collaborators
@@ -491,7 +469,13 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
       // Load slides subcollection
       const slidesRef = collection(db, "presentations", presentationId, "slides");
       const slidesQuery = query(slidesRef, orderBy("order", "asc"));
-      const slidesSnap = await getDocs(slidesQuery);
+      let slidesSnap;
+      try {
+        slidesSnap = await getDocs(slidesQuery);
+      } catch (error) {
+        console.error("Firestore error (getDocs slides):", error);
+        throw error;
+      }
 
       if (!slidesSnap.empty) {
         const loadedSlides: SlideData[] = slidesSnap.docs
@@ -544,17 +528,52 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
               "";
             const finalNotes = decryptedNotes || rawNotes || "";
 
+            // Decrypt subtitle if it exists
+            let decryptedSubtitle = "";
+            if (typeof data.subtitle === "string" && data.subtitle) {
+              try {
+                const rawSubtitle = data.subtitle;
+                // Check if subtitle looks encrypted
+                const looksEncrypted = rawSubtitle.startsWith("U2FsdGVk");
+                
+                if (looksEncrypted) {
+                  const decrypted = decryptText(rawSubtitle);
+                  // Check if decryption actually worked
+                  if (decrypted === rawSubtitle || (decrypted && decrypted.startsWith("U2FsdGVk"))) {
+                    // Decryption failed, use as-is (might be plain text)
+                    decryptedSubtitle = rawSubtitle;
+                  } else {
+                    // Decryption succeeded
+                    decryptedSubtitle = decrypted;
+                  }
+                } else {
+                  // Doesn't look encrypted, use as-is
+                  decryptedSubtitle = rawSubtitle;
+                }
+              } catch (error) {
+                console.warn("Failed to decrypt subtitle:", error);
+                decryptedSubtitle = data.subtitle;
+              }
+            }
+
             return {
               id: docSnap.id,
               order: typeof data.order === "number" ? data.order : index + 1,
               title: data.title || placeholderMap.title,
-              subtitle: typeof data.subtitle === "string" ? decryptText(data.subtitle) || data.subtitle : (finalContent || placeholderMap.subtitle),
+              subtitle: decryptedSubtitle || finalContent || placeholderMap.subtitle,
               content: typeof data.content === "string" && data.content.length > 0 ? (decryptText(data.content) || data.content) : undefined,
               notes: finalNotes,
-              theme: data.theme || themes[0]?.name || DEFAULT_THEME,
+              theme: data.theme || presentationTheme || themes[0]?.name || DEFAULT_THEME,
               slideType: typeof data.slideType === "string" ? (data.slideType as "cover" | "content" | "ending") : undefined,
               templateId: typeof data.templateId === "string" ? data.templateId : undefined,
               formatting: ensureFormatting(data.formatting),
+              imageUrl: typeof data.imageUrl === "string" && data.imageUrl.length > 0 ? data.imageUrl : undefined,
+              imageX: typeof data.imageX === "number" ? data.imageX : undefined,
+              imageY: typeof data.imageY === "number" ? data.imageY : undefined,
+              imageWidth: typeof data.imageWidth === "number" ? data.imageWidth : undefined,
+              imageHeight: typeof data.imageHeight === "number" ? data.imageHeight : undefined,
+              background: typeof data.background === "string" && (data.background === "default" || data.background === "soft" || data.background === "dark") ? (data.background as "default" | "soft" | "dark") : undefined,
+              layout: typeof data.layout === "string" && (data.layout === "layout1" || data.layout === "layout2" || data.layout === "layout3") ? (data.layout as "layout1" | "layout2" | "layout3") : undefined,
             };
           })
           .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
@@ -570,6 +589,8 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           const fallbackId = loadedSlides[0].id;
           setSelectedSlideId(fallbackId);
         }
+        
+        setIsLoadingSlides(false);
       } else {
         // No slides found, create a default one
         const defaultSlide: SlideData = {
@@ -577,16 +598,37 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           title: placeholderMap.title,
           subtitle: placeholderMap.subtitle,
           notes: "",
-          theme: themes[0]?.name || DEFAULT_THEME,
+          theme: presentationTheme || themes[0]?.name || DEFAULT_THEME,
           formatting: createDefaultFormatting(),
         };
         setSlides([defaultSlide]);
         setSelectedSlideId(defaultSlide.id);
+        setIsLoadingSlides(false);
+        
+        // Save the default slide to Firestore
+        if (presentationId) {
+          try {
+            const slideRef = doc(db, "presentations", presentationId, "slides", defaultSlide.id);
+            await setDoc(slideRef, {
+              order: 1,
+              title: defaultSlide.title,
+              subtitle: encryptText(defaultSlide.subtitle),
+              notes: encryptText(defaultSlide.notes),
+              theme: defaultSlide.theme,
+              formatting: defaultSlide.formatting,
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            });
+          } catch (saveError) {
+            console.error("Failed to save default slide to Firestore:", saveError);
+          }
+        }
       }
 
       setHasLoadedFromFirestore(true);
     } catch (error) {
       console.error("Failed to load from Firestore:", error);
+      setIsLoadingSlides(false);
     } finally {
       setIsLoadingFromFirestore(false);
     }
@@ -633,23 +675,39 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   // Use useMemo to get the actual slideId value to avoid triggering on searchParams reference changes
   const urlSlideId = useMemo(() => searchParams.get("slideId"), [searchParams]);
   
+  // Memoize slide IDs to avoid dependency on entire slides array
+  const slideIds = useMemo(() => slides.map((s) => s.id), [slides]);
+  
   useEffect(() => {
     if (!presentationId || !hasLoadedFromFirestore || !urlSlideId) return;
     // Only update if the URL slideId is different and exists in slides
-    if (urlSlideId !== selectedSlideId && slides.some((s) => s.id === urlSlideId)) {
+    if (urlSlideId !== selectedSlideId && slideIds.includes(urlSlideId)) {
       setSelectedSlideId(urlSlideId);
     }
-  }, [urlSlideId, presentationId, hasLoadedFromFirestore, slides, selectedSlideId]);
+  }, [urlSlideId, presentationId, hasLoadedFromFirestore, slideIds, selectedSlideId]);
 
   // Fallback to localStorage if no presentationId (legacy mode)
   useEffect(() => {
-    if (presentationId || hasLoadedFromFirestore) return; // Skip if using Firestore
-    if (typeof window === "undefined") return;
+    if (presentationId || hasLoadedFromFirestore) {
+      // If using Firestore, ensure loading state is cleared (in case Firestore load hasn't happened yet)
+      // The loadFromFirestore function will handle clearing isLoadingSlides when it completes
+      return;
+    }
+    if (typeof window === "undefined") {
+      setIsLoadingSlides(false);
+      return;
+    }
     try {
       const stored = window.localStorage.getItem(storageKey);
-      if (!stored) return;
+      if (!stored) {
+        setIsLoadingSlides(false);
+        return;
+      }
       const parsed = JSON.parse(stored) as SlideData[];
-      if (!Array.isArray(parsed) || parsed.length === 0) return;
+      if (!Array.isArray(parsed) || parsed.length === 0) {
+        setIsLoadingSlides(false);
+        return;
+      }
       const normalized = parsed.map((slide, index) => ({
         ...slide,
         order: slide.order ?? index + 1,
@@ -667,8 +725,10 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         }
         return normalized[0]?.id ?? current;
       });
+      setIsLoadingSlides(false);
     } catch (error) {
       console.error("Failed to load slides from storage", error);
+      setIsLoadingSlides(false);
     } finally {
       hasHydratedRef.current = true;
     }
@@ -689,8 +749,39 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         const items: CommentItem[] = snapshot.docs.map((docSnap) => {
           const data = docSnap.data();
           const rawText = typeof data.text === "string" ? data.text : "";
-          const decrypted = rawText ? decryptText(rawText) : "";
-          const finalText = decrypted || rawText || "";
+          
+          // Comments are stored as plain text (no encryption)
+          // For backward compatibility, try to decrypt if it looks encrypted, otherwise use as-is
+          let finalText = rawText || "";
+          if (rawText) {
+            // Check if text looks encrypted
+            const looksEncrypted = rawText.startsWith("U2FsdGVk");
+            
+            if (looksEncrypted) {
+              // Old encrypted comment - try to decrypt for backward compatibility
+              try {
+                const decrypted = decryptText(rawText);
+                // Check if decryption actually succeeded
+                // decryptText returns the original cipher if decryption fails
+                const decryptionSucceeded = decrypted && 
+                                          decrypted !== rawText && 
+                                          !decrypted.startsWith("U2FsdGVk") && 
+                                          decrypted.length > 0 &&
+                                          decrypted.length < rawText.length; // Decrypted should be shorter
+                
+                if (decryptionSucceeded) {
+                  finalText = decrypted;
+                } else {
+                  // Decryption failed - show a simple message instead of encrypted string
+                  finalText = "[Old encrypted comment - please re-add]";
+                }
+              } catch (error) {
+                // Decryption failed - show simple message
+                finalText = "[Old encrypted comment - please re-add]";
+              }
+            }
+            // If not encrypted, finalText is already set to rawText above
+          }
 
           let timestampLabel = "";
           const createdAt = data.createdAt?.toDate ? data.createdAt.toDate() : null;
@@ -812,11 +903,28 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
 
   // Update content when slide changes, but don't interfere while user is typing
   const prevSlideIdRef = useRef<string | undefined>(selectedSlide?.id);
+  // Use a ref to store the latest slides array to avoid dependency issues
+  const slidesRef = useRef<SlideData[]>(slides);
+  slidesRef.current = slides;
+  
+  // Extract stable values from selectedSlide to avoid object reference changes
+  const selectedSlideId_stable = selectedSlide?.id;
+  const selectedSlideTitle = selectedSlide?.title;
+  const selectedSlideSubtitle = selectedSlide?.subtitle;
+  const selectedSlideFormatting = selectedSlide?.formatting;
+  
   useEffect(() => {
     if (!selectedSlide) return;
-    const formatting = selectedSlide.formatting ?? DEFAULT_FORMATTING;
-    const slideChanged = prevSlideIdRef.current !== selectedSlide.id;
-    prevSlideIdRef.current = selectedSlide.id;
+    const formatting = selectedSlideFormatting ?? DEFAULT_FORMATTING;
+    const slideChanged = prevSlideIdRef.current !== selectedSlideId_stable;
+    const previousSlideId = prevSlideIdRef.current;
+    prevSlideIdRef.current = selectedSlideId_stable;
+    
+    // Capture snapshot of previous slide before switching (if it existed)
+    // Use slidesRef.current to avoid dependency on slides array
+    if (slideChanged && previousSlideId) {
+      captureSnapshotOnSlideChange(previousSlideId, slidesRef.current);
+    }
     
     // When slide changes, always update content
     // When same slide, only update if field is NOT focused (user is not typing)
@@ -825,7 +933,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     
     if (titleRef.current && shouldUpdateTitle) {
       const currentContent = titleRef.current.innerHTML.trim();
-      const newContent = selectedSlide.title || placeholderMap.title;
+      const newContent = selectedSlideTitle || placeholderMap.title;
       // Only update if content actually changed
       if (currentContent !== newContent) {
         titleRef.current.innerHTML = newContent;
@@ -834,9 +942,11 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     }
     if (subtitleRef.current && shouldUpdateSubtitle) {
       const currentContent = subtitleRef.current.innerHTML.trim();
-      const newContent = selectedSlide.subtitle || placeholderMap.subtitle;
-      // Only update if content actually changed
-      if (currentContent !== newContent) {
+      const newContent = selectedSlideSubtitle || placeholderMap.subtitle;
+      // Only update if content actually changed (normalize whitespace for comparison)
+      const normalizedCurrent = currentContent.replace(/\s+/g, ' ').trim();
+      const normalizedNew = newContent.replace(/\s+/g, ' ').trim();
+      if (normalizedCurrent !== normalizedNew) {
         subtitleRef.current.innerHTML = newContent;
       }
       subtitleRef.current.style.lineHeight = `${formatting.subtitle.lineHeight}`;
@@ -844,7 +954,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     if (notesRef.current) {
       notesRef.current.style.lineHeight = `${formatting.notes.lineHeight}`;
     }
-  }, [selectedSlide?.id, selectedSlide?.title, selectedSlide?.subtitle]); // Update when slide or content changes
+  }, [selectedSlideId_stable, selectedSlideTitle, selectedSlideSubtitle, selectedSlideFormatting, slides.length, captureSnapshotOnSlideChange]); // Update when slide or content changes
 
   useEffect(() => {
     const handleSelectionChange = () => {
@@ -1000,6 +1110,10 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     if (selection && selection.rangeCount > 0) {
       selectionRef.current = selection.getRangeAt(0).cloneRange();
     }
+    // Capture snapshot with debounce
+    if (selectedSlideId) {
+      captureSnapshotDebounced(selectedSlideId);
+    }
   };
 
   const handleContentBlur = (field: FieldKey) => {
@@ -1009,6 +1123,10 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     if (!text) {
       ref.innerHTML = placeholderMap[field];
       updateSlideField(fieldKeyMap[field], placeholderMap[field]);
+    }
+    // Capture snapshot immediately on blur
+    if (selectedSlideId) {
+      captureSnapshotImmediate(selectedSlideId);
     }
   };
 
@@ -1025,6 +1143,10 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     setSpeakerNotes(value);
     updateSlideField("notes", value);
     autoResizeNotes(event.target);
+    // Capture snapshot with debounce
+    if (selectedSlideId) {
+      captureSnapshotDebounced(selectedSlideId);
+    }
   };
 
   const handleNotesFocus = () => {
@@ -1044,12 +1166,10 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
 
     const SpeechRecognition =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    
-    const isChrome = /Chrome/.test(navigator.userAgent) && /Google Inc/.test(navigator.vendor);
 
-    // Check browser support - only Chrome supports SpeechRecognition reliably
-    if (!SpeechRecognition || !isChrome) {
-      setVoiceError("Voice notes are only supported in Google Chrome.");
+    // Check if SpeechRecognition API is available (works in Chrome, Edge, Safari, etc.)
+    if (!SpeechRecognition) {
+      setVoiceError("Voice notes are not supported in this browser. Please use Chrome, Edge, or Safari.");
       setIsVoiceRecording(false);
       recognitionRef.current = null;
       return;
@@ -1058,83 +1178,153 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     // Clear any previous error if we have support
     setVoiceError(null);
 
-    const recognition = new SpeechRecognition();
-    recognition.lang = "en-US";
-    recognition.continuous = true;
-    recognition.interimResults = false; // only final results
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.lang = "en-US";
+      recognition.continuous = true;
+      recognition.interimResults = false; // only final results
 
-    recognition.onresult = (event: any) => {
-      let transcript = "";
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        transcript += event.results[i][0].transcript + " ";
-      }
-      transcript = transcript.trim();
-      if (transcript) {
-        console.log("Recognized transcript:", transcript);
-        setSpeakerNotes((prev) => {
-          const newNotes = prev ? prev + "\n" + transcript : transcript;
-          // Update the slide directly
-          updateSlideField("notes", newNotes);
-          return newNotes;
-        });
-      }
-    };
-
-    recognition.onerror = (event: any) => {
-      // Handle speech recognition errors gracefully
-      const errorType = event?.error || "unknown";
-      const errorMessage = event?.message || "";
-      
-      // Only log meaningful errors (not empty objects or common non-critical errors)
-      if (errorType !== "no-speech" && errorType !== "aborted") {
-        if (errorMessage) {
-          console.warn("Speech recognition error:", errorType, errorMessage);
-        } else if (errorType !== "unknown") {
-          console.warn("Speech recognition error:", errorType);
+      recognition.onresult = (event: any) => {
+        let transcript = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          transcript += event.results[i][0].transcript + " ";
         }
-      }
-      
-      setIsVoiceRecording(false);
-    };
+        transcript = transcript.trim();
+        if (transcript) {
+          console.log("Recognized transcript:", transcript);
+          setSpeakerNotes((prev) => {
+            const newNotes = prev ? prev + "\n" + transcript : transcript;
+            // Update the slide directly
+            updateSlideField("notes", newNotes);
+            return newNotes;
+          });
+        }
+      };
 
-    recognition.onend = () => {
-      console.log("Speech recognition ended");
-      setIsVoiceRecording(false);
-    };
+      recognition.onerror = (event: any) => {
+        // Handle speech recognition errors gracefully
+        const errorType = event?.error || "unknown";
+        const errorMessage = event?.message || "";
+        
+        // Handle specific error types
+        if (errorType === "not-allowed") {
+          setVoiceError("Microphone permission denied. Please allow microphone access in your browser settings.");
+          setIsVoiceRecording(false);
+          isRecordingRef.current = false;
+        } else if (errorType === "no-speech") {
+          // This is normal - user didn't speak, just restart silently if still recording
+          if (isRecordingRef.current) {
+            try {
+              recognition.start();
+            } catch (e) {
+              // Already started or other error, ignore
+            }
+          }
+        } else if (errorType === "aborted") {
+          // User stopped or navigation occurred, this is normal
+          setIsVoiceRecording(false);
+          isRecordingRef.current = false;
+        } else if (errorType !== "unknown") {
+          // Log other errors but don't show error message for minor issues
+          console.warn("Speech recognition error:", errorType, errorMessage);
+          if (errorType === "network" || errorType === "service-not-allowed") {
+            setVoiceError("Speech recognition service unavailable. Please check your internet connection.");
+            setIsVoiceRecording(false);
+            isRecordingRef.current = false;
+          }
+        }
+      };
 
-    recognitionRef.current = recognition as any;
+      recognition.onend = () => {
+        console.log("Speech recognition ended");
+        // Auto-restart if we're still in recording mode (use ref to avoid stale closure)
+        if (isRecordingRef.current) {
+          try {
+            recognition.start();
+          } catch (e) {
+            // Already started or error, stop recording
+            setIsVoiceRecording(false);
+            isRecordingRef.current = false;
+          }
+        } else {
+          setIsVoiceRecording(false);
+        }
+      };
+
+      recognitionRef.current = recognition as any;
+    } catch (error) {
+      console.error("Failed to initialize speech recognition:", error);
+      setVoiceError("Failed to initialize voice recognition. Please try refreshing the page.");
+      recognitionRef.current = null;
+    }
 
     return () => {
       try {
-        recognition.stop();
+        if (recognitionRef.current) {
+          (recognitionRef.current as any).stop();
+        }
       } catch {}
     };
   }, []);
 
-  const handleToggleVoice = () => {
+  const handleToggleVoice = async () => {
     // Check for browser support error first
-    if (voiceError) {
+    if (voiceError && !recognitionRef.current) {
       return; // Don't attempt to start if browser doesn't support it
     }
 
     const recognition = recognitionRef.current;
     if (!recognition) {
-      setVoiceError("Voice notes are only supported in Google Chrome.");
+      setVoiceError("Voice recognition is not available. Please refresh the page.");
       return;
     }
 
     if (isVoiceRecording) {
       console.log("Stopping recognition");
-      recognition.stop();
-      setIsVoiceRecording(false);
+      try {
+        isRecordingRef.current = false;
+        recognition.stop();
+        setIsVoiceRecording(false);
+      } catch (err) {
+        console.warn("Error stopping recognition:", err);
+        isRecordingRef.current = false;
+        setIsVoiceRecording(false);
+      }
     } else {
       try {
+        // Request microphone permission first
+        try {
+          await navigator.mediaDevices.getUserMedia({ audio: true });
+        } catch (permError: any) {
+          if (permError.name === "NotAllowedError" || permError.name === "PermissionDeniedError") {
+            setVoiceError("Microphone permission denied. Please allow microphone access in your browser settings.");
+            return;
+          } else if (permError.name === "NotFoundError" || permError.name === "DevicesNotFoundError") {
+            setVoiceError("No microphone found. Please connect a microphone and try again.");
+            return;
+          }
+          // For other errors, try to proceed anyway
+          console.warn("Microphone permission check failed:", permError);
+        }
+
         console.log("Starting recognition");
+        isRecordingRef.current = true;
         recognition.start();
         setIsVoiceRecording(true);
-      } catch (err) {
+        setVoiceError(null); // Clear any previous errors
+      } catch (err: any) {
         console.warn("Error starting recognition:", err);
+        isRecordingRef.current = false;
         setIsVoiceRecording(false);
+        
+        // Provide helpful error messages
+        if (err?.message?.includes("already started") || err?.name === "InvalidStateError") {
+          // Recognition is already running, just update state
+          isRecordingRef.current = true;
+          setIsVoiceRecording(true);
+        } else {
+          setVoiceError("Failed to start voice recognition. Please try again.");
+        }
       }
     }
   };
@@ -1146,25 +1336,105 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
 
   const handleThemeSelect = useCallback(
     (themeName: string) => {
-      // Apply theme to all slides in the deck
-      setSlides((prev) =>
-        prev.map((slide, index) => ({
-                ...slide,
-                theme: themeName,
-                // Auto-set slideType for SCDT theme
-                slideType: themeName === "SCDT" 
-                  ? (index === 0 ? "cover" : index === prev.length - 1 ? "ending" : "content")
-                  : undefined,
-        }))
-      );
+      console.log("🎨 Theme selection triggered:", themeName);
+      console.log("📊 Current state before update:", { 
+        presentationTheme, 
+        selectedSlideTheme: selectedSlide?.theme,
+        selectedSlideId,
+        slidesCount: slides.length
+      });
       
-      // Also update the presentation document if we have a presentationId
-      if (presentationId) {
-        const presentationRef = doc(db, "presentations", presentationId);
-        setDoc(presentationRef, { theme: themeName, themeId: getThemeByName(themeName)?.id || "scdt" }, { merge: true }).catch(console.error);
+      // CRITICAL: Update presentation-level theme state FIRST (this triggers immediate re-render)
+      // Use flushSync to ensure the state update happens immediately (React 18)
+      setPresentationTheme(themeName);
+      console.log("✅ Setting presentationTheme to:", themeName);
+      
+      // Verify the theme exists
+      const themeObj = getThemeByName(themeName);
+      if (!themeObj) {
+        console.error("❌ Theme not found:", themeName);
+        return;
       }
+      console.log("✅ Theme object found:", { id: themeObj.id, name: themeObj.name });
+      
+      // Apply theme to all slides in the deck (only if slides exist)
+      // This updates the local state immediately for visual feedback
+      setSlides((prev) => {
+        if (prev.length === 0) {
+          console.warn("⚠️ No slides to update");
+          return prev;
+        }
+        
+        console.log(`📝 Updating ${prev.length} slides with theme: ${themeName}`);
+        
+        const updatedSlides = prev.map((slide, index) => {
+          const newSlideType = themeName === "SCDT" 
+            ? (index === 0 ? "cover" : index === prev.length - 1 ? "ending" : "content")
+            : slide.slideType; // Preserve existing slideType if not SCDT
+          
+          return {
+            ...slide,
+            theme: themeName,
+            slideType: newSlideType,
+          };
+        });
+        
+        // Save all slides to Firestore in parallel
+        if (presentationId) {
+          const updatePromises = updatedSlides.map((slide) => {
+            if (slide.id) {
+              const slideRef = doc(db, "presentations", presentationId, "slides", slide.id);
+              return setDoc(
+                slideRef,
+                {
+                  theme: themeName,
+                  slideType: slide.slideType || "content",
+                  updatedAt: serverTimestamp(),
+                },
+                { merge: true }
+              ).then(() => {
+                console.log(`💾 Slide ${slide.id} saved with theme: ${themeName}`);
+              }).catch((error) => {
+                console.error(`❌ Failed to update slide ${slide.id} theme:`, error);
+              });
+            }
+            return Promise.resolve();
+          });
+          
+          // Also update the presentation document
+          const presentationRef = doc(db, "presentations", presentationId);
+          const themeObj = getThemeByName(themeName);
+          updatePromises.push(
+            setDoc(
+              presentationRef,
+              {
+                theme: themeName,
+                themeId: themeObj?.id || "default",
+                updatedAt: serverTimestamp(),
+              },
+              { merge: true }
+            ).then(() => {
+              console.log(`💾 Presentation saved with theme: ${themeName}`);
+            }).catch((error) => {
+              console.error("❌ Failed to update theme in Firestore:", error);
+            })
+          );
+          
+          // Execute all updates in parallel
+          void Promise.all(updatePromises);
+        } else {
+          console.warn("⚠️ No presentationId available");
+        }
+        
+        return updatedSlides;
+      });
+      
+      // Force a re-render by logging the state after a microtask
+      Promise.resolve().then(() => {
+        console.log("🔄 State after update should trigger re-render");
+      });
     },
-    [presentationId]
+    [presentationId, slides, selectedSlide]
   );
 
   const handleSlideTypeSelect = useCallback(
@@ -1259,8 +1529,97 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     }
   };
 
-  const applyUndo = () => execWithCommand("undo");
-  const applyRedo = () => execWithCommand("redo");
+  // New formatting handlers for whole-block formatting (title/subtitle)
+  const updateSelectedSlideFormatting = useCallback(
+    (updater: (prev: SlideFormatting) => SlideFormatting) => {
+      if (!selectedSlideId) return;
+
+      setSlides((prev) =>
+        prev.map((slide) => {
+          if (slide.id !== selectedSlideId) return slide;
+          const prevFormatting = ensureFormatting(slide.formatting);
+          return {
+            ...slide,
+            formatting: updater(prevFormatting),
+          };
+        })
+      );
+
+      if (presentationId && selectedSlideId) {
+        const slide = slides.find((s) => s.id === selectedSlideId);
+        if (slide) {
+          const prevFormatting = ensureFormatting(slide.formatting);
+          const nextFormatting = updater(prevFormatting);
+          const slideRef = doc(db, "presentations", presentationId, "slides", selectedSlideId);
+          void setDoc(
+            slideRef,
+            { formatting: nextFormatting, updatedAt: serverTimestamp() },
+            { merge: true }
+          );
+        }
+      }
+    },
+    [slides, selectedSlideId, presentationId]
+  );
+
+  const handleToggleBold = useCallback(() => {
+    updateSelectedSlideFormatting((prev) => ({ ...prev, bold: !prev.bold }));
+  }, [updateSelectedSlideFormatting]);
+
+  const handleToggleItalic = useCallback(() => {
+    updateSelectedSlideFormatting((prev) => ({ ...prev, italic: !prev.italic }));
+  }, [updateSelectedSlideFormatting]);
+
+  const handleToggleUnderline = useCallback(() => {
+    updateSelectedSlideFormatting((prev) => ({ ...prev, underline: !prev.underline }));
+  }, [updateSelectedSlideFormatting]);
+
+  const handleSetAlign = useCallback(
+    (align: "left" | "center" | "right") => {
+      updateSelectedSlideFormatting((prev) => ({ ...prev, align }));
+    },
+    [updateSelectedSlideFormatting]
+  );
+
+  const handleSetListType = useCallback(
+    (listType: "none" | "bullets" | "numbers") => {
+      updateSelectedSlideFormatting((prev) => ({ ...prev, listType }));
+    },
+    [updateSelectedSlideFormatting]
+  );
+
+  // Image drag and resize handlers
+  const [isDraggingImage, setIsDraggingImage] = useState(false);
+  const [isResizingImage, setIsResizingImage] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 });
+
+  const updateImagePosition = useCallback((x: number, y: number) => {
+    if (!selectedSlideId) return;
+    setSlides((prev) =>
+      prev.map((slide) =>
+        slide.id === selectedSlideId
+          ? { ...slide, imageX: x, imageY: y }
+          : slide
+      )
+    );
+  }, [selectedSlideId]);
+
+  const updateImageSize = useCallback((width: number, height: number) => {
+    if (!selectedSlideId) return;
+    setSlides((prev) =>
+      prev.map((slide) =>
+        slide.id === selectedSlideId
+          ? { ...slide, imageWidth: width, imageHeight: height }
+          : slide
+      )
+    );
+  }, [selectedSlideId]);
+
+  // These handlers will be defined after isReadOnly is available
+  const handleImageMouseDownRef = useRef<((e: React.MouseEvent, slideContainer: HTMLElement) => void) | null>(null);
+  const handleImageResizeMouseDownRef = useRef<((e: React.MouseEvent, slideContainer: HTMLElement) => void) | null>(null);
+
 
   const updateSlideField = (field: keyof SlideData, value: string | "cover" | "content" | "ending") => {
     setSlides((prev) =>
@@ -1268,8 +1627,220 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     );
   };
 
+
+  const compressImage = (file: File, maxWidth: number = 1200, maxHeight: number = 1200, quality: number = 0.8): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          // Calculate new dimensions
+          let width = img.width;
+          let height = img.height;
+          
+          if (width > maxWidth || height > maxHeight) {
+            if (width > height) {
+              height = (height * maxWidth) / width;
+              width = maxWidth;
+            } else {
+              width = (width * maxHeight) / height;
+              height = maxHeight;
+            }
+          }
+
+          // Create canvas and compress
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          
+          if (!ctx) {
+            reject(new Error('Could not get canvas context'));
+            return;
+          }
+
+          ctx.drawImage(img, 0, 0, width, height);
+          
+          // Convert to base64 with compression
+          const compressedBase64 = canvas.toDataURL('image/jpeg', quality);
+          
+          // Check if still too large (Firestore limit is ~1MB, but base64 is ~33% larger, so aim for ~750KB)
+          if (compressedBase64.length > 750000) {
+            // Try again with lower quality
+            const lowerQuality = quality * 0.7;
+            const moreCompressed = canvas.toDataURL('image/jpeg', lowerQuality);
+            resolve(moreCompressed);
+          } else {
+            resolve(compressedBase64);
+          }
+        };
+        img.onerror = reject;
+        img.src = e.target?.result as string;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleImageFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file');
+      return;
+    }
+
+    setImageFile(file);
+
+    // Compress and create preview
+    try {
+      const compressedBase64 = await compressImage(file);
+      setImagePreview(compressedBase64);
+    } catch (error) {
+      console.error('Error compressing image:', error);
+      alert('Error processing image. Please try another image.');
+      setImageFile(null);
+    }
+  };
+
+  const handleSaveImage = async () => {
+    if (!selectedSlide || !imageFile) return;
+
+    try {
+      // Compress image before saving (already compressed in preview, but ensure it's ready)
+      const base64Image = imagePreview || await compressImage(imageFile);
+      
+      if (!base64Image) {
+        alert('Error processing image. Please try again.');
+        return;
+      }
+
+      // Final check - ensure it's under Firestore limit
+      if (base64Image.length > 1000000) {
+        // Try with more aggressive compression
+        const moreCompressed = await compressImage(imageFile, 800, 800, 0.6);
+        if (moreCompressed.length > 1000000) {
+          alert('Image is too large even after compression. Please use a smaller image.');
+          return;
+        }
+        
+        // Update local state with compressed image
+        setSlides((prev) =>
+          prev.map((slide) =>
+            slide.id === selectedSlide.id
+              ? { ...slide, imageUrl: moreCompressed }
+              : slide
+          )
+        );
+
+        // Save to Firestore
+        if (presentationId) {
+          const slideRef = doc(db, "presentations", presentationId, "slides", selectedSlide.id);
+          await setDoc(
+            slideRef,
+            { 
+              imageUrl: moreCompressed,
+              updatedAt: serverTimestamp() 
+            },
+            { merge: true }
+          );
+        }
+      } else {
+        // Update local state - save to imageUrl field with default position/size (no encryption needed)
+        setSlides((prev) =>
+          prev.map((slide) =>
+            slide.id === selectedSlide.id
+              ? { 
+                  ...slide, 
+                  imageUrl: base64Image,
+                  imageX: slide.imageX ?? 50,
+                  imageY: slide.imageY ?? 50,
+                  imageWidth: slide.imageWidth ?? 30,
+                  imageHeight: slide.imageHeight ?? 30,
+                }
+              : slide
+          )
+        );
+
+        // Save to Firestore - save imageUrl directly with position/size (no encryption)
+        if (presentationId) {
+          const slideRef = doc(db, "presentations", presentationId, "slides", selectedSlide.id);
+          await setDoc(
+            slideRef,
+            { 
+              imageUrl: base64Image,
+              imageX: selectedSlide.imageX ?? 50,
+              imageY: selectedSlide.imageY ?? 50,
+              imageWidth: selectedSlide.imageWidth ?? 30,
+              imageHeight: selectedSlide.imageHeight ?? 30,
+              updatedAt: serverTimestamp() 
+            },
+            { merge: true }
+          );
+        }
+      }
+
+      setIsImageModalOpen(false);
+      setImageFile(null);
+      setImagePreview("");
+    } catch (error) {
+      console.error('Error saving image:', error);
+      alert('Error saving image. Please try again.');
+    }
+  };
+
+  const handleSetBackgroundStyle = async (style: "default" | "soft" | "dark") => {
+    // Update presentation-level background
+    setPresentationBackground(style);
+
+    // Remove background from all slides (since it's now at presentation level)
+    setSlides((prev) =>
+      prev.map((slide) => {
+        const { background, ...slideWithoutBackground } = slide;
+        return slideWithoutBackground;
+      })
+    );
+
+    // Save background to presentation document in Firestore
+    if (presentationId) {
+      const presentationRef = doc(db, "presentations", presentationId);
+      await setDoc(
+        presentationRef,
+        { background: style, updatedAt: serverTimestamp() },
+        { merge: true }
+      );
+    }
+
+    setIsBackgroundModalOpen(false);
+  };
+
+  const handleSetLayout = async (layout: "layout1" | "layout2" | "layout3") => {
+    if (!selectedSlide) return;
+
+    setSlides((prev) =>
+      prev.map((slide) =>
+        slide.id === selectedSlide.id
+          ? { ...slide, layout }
+          : slide
+      )
+    );
+
+    if (presentationId) {
+      const slideRef = doc(db, "presentations", presentationId, "slides", selectedSlide.id);
+      await setDoc(
+        slideRef,
+        { layout, updatedAt: serverTimestamp() },
+        { merge: true }
+      );
+    }
+
+    setIsLayoutModalOpen(false);
+  };
+
   const handleAddSlide = async () => {
-      const themeName = selectedThemeName || themes[0]?.name || DEFAULT_THEME;
+      const themeName = effectiveThemeName || themes[0]?.name || DEFAULT_THEME;
 
     if (!presentationId) {
       setSlides((prev) => {
@@ -1286,6 +1857,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         subtitle: placeholderMap.subtitle,
         notes: "",
         theme: themeName,
+        slideType: "content",
           formatting: defaultFormatting,
       };
         setSelectedSlideId(newSlideId);
@@ -1307,6 +1879,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
       subtitle: placeholderMap.subtitle,
       notes: "",
       theme: themeName,
+      slideType: "content",
       formatting: defaultFormatting,
     };
 
@@ -1320,6 +1893,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           content: encryptText(""),
           notes: encryptText(""),
           theme: themeName,
+          slideType: "content",
           formatting: defaultFormatting,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
@@ -1371,7 +1945,8 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
       updateSlideField("notes", notesRef.current.value);
     }
     
-    const currentUser = auth.currentUser;
+    // Use user from useAuth hook, with fallback to auth.currentUser
+    const currentUser = user || auth.currentUser;
     
     if (!presentationId) {
       // Fallback to localStorage if no presentationId
@@ -1396,15 +1971,22 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
 
       // Only set ownerId and isShared flag when sharing (for team dashboard)
       if (shouldShare && currentUser) {
-        presentationData.ownerId = currentUser.uid;
+        const userId = typeof currentUser.uid === 'string' ? currentUser.uid : (currentUser as any).uid;
+        presentationData.ownerId = userId;
         presentationData.isShared = true; // Mark as shared for team dashboard
       } else if (currentUser) {
         // For private saves, ensure ownerId is set but mark as private
-        presentationData.ownerId = currentUser.uid;
+        const userId = typeof currentUser.uid === 'string' ? currentUser.uid : (currentUser as any).uid;
+        presentationData.ownerId = userId;
         presentationData.isShared = false; // Mark as private
       }
 
-      await setDoc(presentationRef, presentationData, { merge: true });
+      try {
+        await setDoc(presentationRef, presentationData, { merge: true });
+      } catch (error) {
+        console.error("Firestore error (setDoc presentation):", error);
+        throw error;
+      }
 
       // Save all slides
       for (const slide of slides) {
@@ -1420,20 +2002,29 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         const encryptedContent = encryptText(plainContent);
         const encryptedNotes = encryptText(plainNotes);
 
-        await setDoc(
-          slideRef,
-          {
-            order: slideIndex + 1,
-            title: typeof slide.title === "string" ? slide.title : "",
-            content: encryptedContent,
-            notes: encryptedNotes,
-            theme: slide.theme || "default",
-            slideType: slide.slideType,
-            formatting: slide.formatting || createDefaultFormatting(),
-            updatedAt: serverTimestamp(),
-          },
-          { merge: true }
-        );
+        const slideData: any = {
+          order: slideIndex + 1,
+          title: typeof slide.title === "string" ? slide.title : "",
+          content: encryptedContent,
+          notes: encryptedNotes,
+          theme: slide.theme || "default",
+          formatting: slide.formatting || createDefaultFormatting(),
+          updatedAt: serverTimestamp(),
+        };
+        
+        // Only include slideType if it's defined, otherwise use default
+        if (slide.slideType && (slide.slideType === "cover" || slide.slideType === "content" || slide.slideType === "ending")) {
+          slideData.slideType = slide.slideType;
+        } else {
+          slideData.slideType = "content";
+        }
+
+        try {
+          await setDoc(slideRef, slideData, { merge: true });
+        } catch (error) {
+          console.error("Firestore error (setDoc slide):", error, "Slide ID:", slide.id);
+          // Continue with other slides even if one fails
+        }
       }
 
       // Update localStorage meta for recent presentations (always, for both save and share)
@@ -1446,10 +2037,12 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
       markPresentationSaved(presentationId, presentationTitle, slideSummary, status);
 
       if (currentUser) {
+        const userId = typeof currentUser.uid === 'string' ? currentUser.uid : (currentUser as any).uid;
+        const userEmail = typeof currentUser.email === 'string' ? currentUser.email : (currentUser as any).email;
         await logAuditEvent({
           presentationId,
-          userId: currentUser.uid,
-          userEmail: currentUser.email,
+          userId: userId || null,
+          userEmail: userEmail || null,
           action: shouldShare ? "SHARE_PRESENTATION" : "UPDATE_SLIDE_SET",
           details: {
             slideIds: slideSummary.map((slide) => slide.id),
@@ -1469,9 +2062,11 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
       return;
     }
 
-    const currentUser = auth.currentUser;
+    // Use user from useAuth hook, with fallback to auth.currentUser
+    const currentUser = user || auth.currentUser;
     if (!currentUser) {
       console.error("Cannot share: user not authenticated");
+      alert("Please sign in to share presentations.");
       return;
     }
 
@@ -1480,7 +2075,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
       await handleSaveSlide(true);
 
       // Redirect to dashboard to see the shared presentation
-      window.location.href = "http://localhost:3006/dashboard";
+      router.push("/dashboard");
     } catch (error) {
       console.error("Failed to share presentation:", error);
       alert("Failed to share presentation. Please try again.");
@@ -1585,27 +2180,115 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     // URL will be updated by the useEffect that watches selectedSlideId
   };
 
-  const moveSlide = (direction: "up" | "down") => {
-    setSlides((prev) => {
-      const index = prev.findIndex((slide) => slide.id === selectedSlideId);
-      if (index === -1) return prev;
+  const moveSlide = async (direction: "up" | "down") => {
+    // Read content directly from refs to ensure we have the latest data
+    // Clean the HTML content similar to how syncActiveFieldContent does it
+    const getRefContent = (ref: HTMLDivElement | null, fallback: string) => {
+      if (!ref) return fallback;
+      const html = ref.innerHTML;
+      const cleaned = html
+        .replace(/<br\s*\/?>/gi, "")
+        .replace(/&nbsp;/gi, " ")
+        .trim();
+      return cleaned ? html : fallback;
+    };
+
+    // Get current slide data for fallback
+    const currentSlide = slides.find((slide) => slide.id === selectedSlideId);
+    const currentTitle = getRefContent(titleRef.current, currentSlide?.title || "");
+    const currentSubtitle = getRefContent(subtitleRef.current, currentSlide?.subtitle || "");
+    const currentNotes = notesRef.current?.value || currentSlide?.notes || "";
+
+    // Use a functional update to get the latest state and update in one go
+    let updatedSlides: SlideData[] = [];
+    let oldIndex = 0;
+    let newIndex = 0;
+    
+    setSlides((currentSlides) => {
+      // Find the index in the current slides array
+      const index = currentSlides.findIndex((slide) => slide.id === selectedSlideId);
+      if (index === -1) return currentSlides;
+      
       const targetIndex = direction === "up" ? index - 1 : index + 1;
-      if (targetIndex < 0 || targetIndex >= prev.length) return prev;
-      const nextSlides = [...prev];
+      if (targetIndex < 0 || targetIndex >= currentSlides.length) return currentSlides;
+
+      // Store indices for audit log
+      oldIndex = index + 1;
+      newIndex = targetIndex + 1;
+
+      // First, update the selected slide with content from refs
+      const slidesWithUpdatedContent = currentSlides.map((slide) => {
+        if (slide.id === selectedSlideId) {
+          return {
+            ...slide,
+            title: currentTitle || slide.title || "",
+            subtitle: currentSubtitle || slide.subtitle || "",
+            notes: currentNotes || slide.notes || "",
+          };
+        }
+        return slide;
+      });
+
+      // Now reorder the slides
+      const nextSlides = [...slidesWithUpdatedContent];
       const [moving] = nextSlides.splice(index, 1);
       nextSlides.splice(targetIndex, 0, moving);
-      return nextSlides;
+
+      // Update order field for all slides to match their new positions
+      updatedSlides = nextSlides.map((slide, idx) => ({
+        ...slide,
+        order: idx + 1,
+      }));
+
+      return updatedSlides;
     });
+
+    // Save updated order to Firestore if we have a presentationId
+    if (presentationId && updatedSlides.length > 0) {
+      try {
+        // Update all affected slides in parallel
+        const updatePromises = updatedSlides.map((slide: SlideData) => {
+          const slideRef = doc(db, "presentations", presentationId, "slides", slide.id);
+          return setDoc(
+            slideRef,
+            { order: slide.order, updatedAt: serverTimestamp() },
+            { merge: true }
+          );
+        });
+        await Promise.all(updatePromises);
+
+        // Log audit event
+        const currentUser = auth.currentUser;
+        if (currentUser) {
+          await logAuditEvent({
+            presentationId,
+            userId: currentUser.uid,
+            userEmail: currentUser.email,
+            action: "REORDER_SLIDE",
+            details: {
+              slideId: selectedSlideId,
+              direction,
+              oldIndex,
+              newIndex,
+            },
+          });
+        }
+      } catch (error) {
+        console.error("Failed to update slide order in Firestore:", error);
+        // Revert to original order on error
+        setSlides(slides);
+      }
+    }
   };
 
-  const handleMoveUp = () => {
+  const handleMoveUp = async () => {
     if (isFirstSlide) return;
-    moveSlide("up");
+    await moveSlide("up");
   };
 
-  const handleMoveDown = () => {
+  const handleMoveDown = async () => {
     if (isLastSlide) return;
-    moveSlide("down");
+    await moveSlide("down");
   };
 
   const handleCommentSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -1660,11 +2343,11 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     }
 
     try {
-      const encryptedText = encryptText(trimmed);
+      // Save comments as plain text (no encryption needed for comments)
       const commentRef = await addDoc(collection(db, "presentations", presentationId, "comments"), {
         userId,
         userName,
-        text: encryptedText,
+        text: trimmed, // Save as plain text
         createdAt: serverTimestamp(),
       });
       setNewComment("");
@@ -1701,7 +2384,16 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
       try {
         setIsUpdatingTeam(true);
         // Update teamRoles to set new member as "editor"
+        // Ensure owner is included in teamRoles (by both ID and email if available)
         const updatedRoles: Record<string, "owner" | "editor" | "viewer"> = { ...teamRoles, [normalizedValue]: "editor" };
+        if (presentationOwnerId) {
+          const ownerKey = presentationOwnerId.toLowerCase();
+          updatedRoles[ownerKey] = "owner";
+          // Also store by owner email if we have it
+          if (ownerDisplayName && ownerDisplayName.includes("@")) {
+            updatedRoles[ownerDisplayName.toLowerCase()] = "owner";
+          }
+        }
         await setDoc(
           doc(db, "presentations", presentationId),
           {
@@ -1749,7 +2441,16 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   const handleUpdateRole = async (member: string, newRole: "editor" | "viewer") => {
     if (!presentationId) return;
     try {
+      // Ensure owner is included in teamRoles (by both ID and email if available)
       const updatedRoles: Record<string, "owner" | "editor" | "viewer"> = { ...teamRoles, [member]: newRole };
+      if (presentationOwnerId) {
+        const ownerKey = presentationOwnerId.toLowerCase();
+        updatedRoles[ownerKey] = "owner";
+        // Also store by owner email if we have it
+        if (ownerDisplayName && ownerDisplayName.includes("@")) {
+          updatedRoles[ownerDisplayName.toLowerCase()] = "owner";
+        }
+      }
       await setDoc(
         doc(db, "presentations", presentationId),
         {
@@ -1772,6 +2473,15 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         // Remove from teamRoles
         const updatedRoles: Record<string, "owner" | "editor" | "viewer"> = { ...teamRoles };
         delete updatedRoles[member];
+        // Ensure owner is included in teamRoles (by both ID and email if available)
+        if (presentationOwnerId) {
+          const ownerKey = presentationOwnerId.toLowerCase();
+          updatedRoles[ownerKey] = "owner";
+          // Also store by owner email if we have it
+          if (ownerDisplayName && ownerDisplayName.includes("@")) {
+            updatedRoles[ownerDisplayName.toLowerCase()] = "owner";
+          }
+        }
         await setDoc(
           doc(db, "presentations", presentationId),
           {
@@ -1821,7 +2531,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         encryptedContent: encryptText(typeof slide.subtitle === "string" ? slide.subtitle : ""),
         encryptedNotes: encryptText(typeof slide.notes === "string" ? slide.notes : ""),
         theme: slide.theme || "default",
-        slideType: slide.slideType,
+        slideType: slide.slideType || "content",
       }));
 
       try {
@@ -1940,6 +2650,9 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     [isRestoringVersion, presentationId, versions, slides, router, loadFromFirestore]
   );
 
+  // Memoize versions length to avoid dependency on entire array
+  const versionsLength = versions.length;
+  
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -1964,9 +2677,11 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     return () => {
       delete extendedWindow.__editorVersions;
     };
-  }, [handleSaveVersion, handleRestoreVersion, versions, isSavingVersion, isRestoringVersion]);
+  }, [handleSaveVersion, handleRestoreVersion, versionsLength, isSavingVersion, isRestoringVersion]);
 
-  const toolbarDisabled = selectedSlide == null || status === "final";
+  // Allow toolbar buttons to work even when no slide is selected (for Theme, AI Assistant, etc.)
+  // Only disable editing-specific buttons when no slide is selected or status is final
+  const toolbarDisabled = (selectedSlide == null && slides.length > 0) || status === "final";
 
   const highlightIndicatorStyle: CSSProperties =
     commandState.highlight === "transparent"
@@ -1976,11 +2691,21 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   const toolbarActions: Record<string, () => void> = {
     Undo: applyUndo,
     Redo: applyRedo,
-    Image: () => undefined,
-    Background: () => undefined,
-    Layout: () => undefined,
-    Theme: () => undefined,
-    Transition: () => undefined,
+      Image: () => {
+      // Reset image file and preview when opening modal
+      setImageFile(null);
+      setImagePreview(selectedSlide?.imageUrl || "");
+      setIsImageModalOpen(true);
+    },
+    Background: () => {
+      setIsBackgroundModalOpen(true);
+    },
+    Layout: () => {
+      setIsLayoutModalOpen(true);
+    },
+    Theme: () => {
+      toggleThemePicker();
+    },
     "AI Assistant": () => setShowAssistant((prev) => !prev),
   };
 
@@ -2026,28 +2751,47 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   };
 
   const handleOpenSlideshow = () => {
-    const fallbackId = slides[0]?.id ?? "";
-    const targetId = selectedSlideId || fallbackId;
-    if (typeof window !== "undefined") {
-      window.sessionStorage.setItem(VIEWER_RETURN_KEY, `${window.location.pathname}${window.location.search}`);
-      const viewerPayload = {
-        presentationId,
-        slideId: targetId,
-        presentationTitle,
-        slides: slides.map((slide) => ({
-          id: slide.id,
-          title: typeof slide.title === "string" ? slide.title : "",
-          subtitle: typeof slide.subtitle === "string" ? slide.subtitle : "",
-          notes: typeof slide.notes === "string" ? slide.notes : "",
-        })),
-      };
-      try {
-        window.sessionStorage.setItem(VIEWER_STATE_KEY, JSON.stringify(viewerPayload));
-      } catch (error) {
-        console.error("Failed to store viewer payload", error);
-      }
+    if (!presentationId) {
+      console.warn("Cannot open slideshow: no presentationId");
+      return;
     }
-      router.push("/viewer");
+    
+    // Find the currently selected slide
+    const currentSlide = slides.find((slide) => slide.id === selectedSlideId);
+    const slideId = currentSlide?.id || (slides.length > 0 ? slides[0].id : null);
+    
+    // Prepare slides data for viewer (include image data)
+    const viewerSlides = slides.map((slide) => ({
+      id: slide.id,
+      title: typeof slide.title === "string" ? slide.title : "Untitled slide",
+      subtitle: typeof slide.subtitle === "string" ? slide.subtitle : "",
+      notes: typeof slide.notes === "string" ? slide.notes : "",
+      presentationId: presentationId,
+      imageUrl: slide.imageUrl,
+      imageX: slide.imageX,
+      imageY: slide.imageY,
+      imageWidth: slide.imageWidth,
+      imageHeight: slide.imageHeight,
+    }));
+
+    // Store viewer state in sessionStorage
+    if (typeof window !== "undefined") {
+      const viewerState = {
+        presentationId: presentationId,
+        slideId: slideId,
+        presentationTitle: presentationTitle,
+        presentationBackground: presentationBackground,
+        slides: viewerSlides,
+      };
+      window.sessionStorage.setItem(VIEWER_STATE_KEY, JSON.stringify(viewerState));
+      window.sessionStorage.setItem(VIEWER_RETURN_KEY, `${window.location.pathname}${window.location.search}`);
+    }
+    
+    // Navigate to viewer with presentationId and slideId
+    const viewerUrl = slideId 
+      ? `/viewer?presentationId=${encodeURIComponent(presentationId)}&slideId=${encodeURIComponent(slideId)}`
+      : `/viewer?presentationId=${encodeURIComponent(presentationId)}`;
+    router.push(viewerUrl);
   };
 
   const toggleColorPicker = () => setIsColorPickerOpen((prev) => !prev);
@@ -2057,6 +2801,180 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
     currentFormatting[activeField]?.lineHeight ?? DEFAULT_FORMATTING[activeField]?.lineHeight ?? 1.2;
 
   const isReadOnly = status === "final";
+
+  // Define image handlers after isReadOnly is available
+  const handleImageMouseDownCallback = useCallback((e: React.MouseEvent, slideContainer: HTMLElement) => {
+    if (isReadOnly) return;
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const rect = slideContainer.getBoundingClientRect();
+    const currentX = selectedSlide?.imageX ?? 50;
+    const currentY = selectedSlide?.imageY ?? 50;
+    
+    // Calculate initial mouse position relative to container
+    const startMouseX = e.clientX - rect.left;
+    const startMouseY = e.clientY - rect.top;
+    
+    // Calculate initial image center position in pixels
+    const startImageCenterX = (currentX / 100) * rect.width;
+    const startImageCenterY = (currentY / 100) * rect.height;
+    
+    // Calculate offset from image center to mouse position
+    const offsetX = startMouseX - startImageCenterX;
+    const offsetY = startMouseY - startImageCenterY;
+    
+    setDragStart({ x: offsetX, y: offsetY });
+    setIsDraggingImage(true);
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      // Calculate new mouse position relative to container
+      const newMouseX = moveEvent.clientX - rect.left;
+      const newMouseY = moveEvent.clientY - rect.top;
+      
+      // Calculate new image center position (mouse position minus offset)
+      const newImageCenterX = newMouseX - offsetX;
+      const newImageCenterY = newMouseY - offsetY;
+      
+      // Convert to percentage
+      const newX = (newImageCenterX / rect.width) * 100;
+      const newY = (newImageCenterY / rect.height) * 100;
+      
+      // Get current image size to constrain properly
+      const imageWidth = selectedSlide?.imageWidth ?? 30;
+      const imageHeight = selectedSlide?.imageHeight ?? 30;
+      
+      // Constrain to slide bounds - account for image size
+      // Image center can't be closer than half the image size from edges
+      const minX = (imageWidth / 2);
+      const maxX = 100 - (imageWidth / 2);
+      const minY = (imageHeight / 2);
+      const maxY = 100 - (imageHeight / 2);
+      
+      const constrainedX = Math.max(minX, Math.min(maxX, newX));
+      const constrainedY = Math.max(minY, Math.min(maxY, newY));
+      
+      updateImagePosition(constrainedX, constrainedY);
+    };
+
+    const handleMouseUp = () => {
+      setIsDraggingImage(false);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      
+      // Save to Firestore
+      if (presentationId && selectedSlideId) {
+        const slide = slides.find(s => s.id === selectedSlideId);
+        if (slide) {
+          const slideRef = doc(db, "presentations", presentationId, "slides", selectedSlideId);
+          setDoc(
+            slideRef,
+            { 
+              imageX: slide.imageX ?? 50,
+              imageY: slide.imageY ?? 50,
+              updatedAt: serverTimestamp() 
+            },
+            { merge: true }
+          ).catch(console.error);
+        }
+      }
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  }, [selectedSlide, isReadOnly, presentationId, selectedSlideId, slides, updateImagePosition]);
+
+  const handleImageResizeMouseDownCallback = useCallback((e: React.MouseEvent, slideContainer: HTMLElement) => {
+    if (isReadOnly) return;
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const rect = slideContainer.getBoundingClientRect();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    
+    const currentWidth = selectedSlide?.imageWidth ?? 30;
+    const currentHeight = selectedSlide?.imageHeight ?? 30;
+    const currentX = selectedSlide?.imageX ?? 50;
+    const currentY = selectedSlide?.imageY ?? 50;
+    
+    setResizeStart({ x: startX, y: startY, width: currentWidth, height: currentHeight });
+    setIsResizingImage(true);
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const deltaX = ((moveEvent.clientX - startX) / rect.width) * 100;
+      const deltaY = ((moveEvent.clientY - startY) / rect.height) * 100;
+      
+      const newWidth = Math.max(10, Math.min(80, currentWidth + deltaX));
+      const newHeight = Math.max(10, Math.min(80, currentHeight + deltaY));
+      
+      updateImageSize(newWidth, newHeight);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizingImage(false);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      
+      // Save to Firestore
+      if (presentationId && selectedSlideId) {
+        const slide = slides.find(s => s.id === selectedSlideId);
+        if (slide) {
+          const slideRef = doc(db, "presentations", presentationId, "slides", selectedSlideId);
+          setDoc(
+            slideRef,
+            { 
+              imageWidth: slide.imageWidth ?? 30,
+              imageHeight: slide.imageHeight ?? 30,
+              updatedAt: serverTimestamp() 
+            },
+            { merge: true }
+          ).catch(console.error);
+        }
+      }
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  }, [selectedSlide, isReadOnly, presentationId, selectedSlideId, slides, updateImageSize]);
+
+  // Update refs when callbacks change
+  useEffect(() => {
+    handleImageMouseDownRef.current = handleImageMouseDownCallback;
+  }, [handleImageMouseDownCallback]);
+
+  useEffect(() => {
+    handleImageResizeMouseDownRef.current = handleImageResizeMouseDownCallback;
+  }, [handleImageResizeMouseDownCallback]);
+
+  // Delete image handler
+  const handleDeleteImage = useCallback(async () => {
+    if (!selectedSlideId || isReadOnly) return;
+    
+    setSlides((prev) =>
+      prev.map((slide) =>
+        slide.id === selectedSlideId
+          ? { ...slide, imageUrl: undefined, imageX: undefined, imageY: undefined, imageWidth: undefined, imageHeight: undefined }
+          : slide
+      )
+    );
+
+    if (presentationId) {
+      const slideRef = doc(db, "presentations", presentationId, "slides", selectedSlideId);
+      await setDoc(
+        slideRef,
+        { 
+          imageUrl: null,
+          imageX: null,
+          imageY: null,
+          imageWidth: null,
+          imageHeight: null,
+          updatedAt: serverTimestamp() 
+        },
+        { merge: true }
+      );
+    }
+  }, [selectedSlideId, isReadOnly, presentationId]);
 
   const resolvedUserId = firebaseUserId ?? (typeof storedUserRecord?.uid === "string" ? storedUserRecord.uid : null);
   const resolvedUserEmail =
@@ -2071,6 +2989,22 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   );
   const canChat = useMemo(() => {
     if (!presentationId) return false;
+    
+    // Check teamRoles first (primary source of truth)
+    if (resolvedUserEmail) {
+      const emailLower = resolvedUserEmail.toLowerCase();
+      if (teamRoles[emailLower] === "owner" || teamRoles[emailLower] === "editor" || teamRoles[emailLower] === "viewer") {
+        return true;
+      }
+    }
+    if (resolvedUserId) {
+      const userIdLower = resolvedUserId.toLowerCase();
+      if (teamRoles[userIdLower] === "owner" || teamRoles[userIdLower] === "editor" || teamRoles[userIdLower] === "viewer") {
+        return true;
+      }
+    }
+    
+    // Fallback to legacy checks for backward compatibility
     if (presentationOwnerId && resolvedUserId && resolvedUserId === presentationOwnerId) return true;
     if (resolvedUserId && (collaborators.includes(resolvedUserId) || collaboratorsLowerSet.has(resolvedUserId.toLowerCase()))) {
       return true;
@@ -2082,11 +3016,11 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
       }
     }
     return false;
-  }, [presentationId, presentationOwnerId, resolvedUserId, resolvedUserEmail, collaborators, collaboratorsLowerSet]);
+  }, [presentationId, presentationOwnerId, resolvedUserId, resolvedUserEmail, collaborators, collaboratorsLowerSet, teamRoles]);
   const isOwner = Boolean(presentationOwnerId && resolvedUserId && resolvedUserId === presentationOwnerId);
 
   return (
-    <>
+    <div data-theme={isDark ? "dark" : "light"}>
       <nav className={styles.nav}>
         <div className={styles.logoWrap}>
           <img src="/aramco-digital.png" alt="Aramco Digital" className={styles.logo} />
@@ -2225,6 +3159,19 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           ) : null}
         </div>
       </nav>
+      {isLoadingSlides && (
+        <div className={styles.loadingOverlay}>
+          Loading presentation...
+        </div>
+      )}
+
+      {!isLoadingSlides && slides.length === 0 && presentationId && hasLoadedFromFirestore && (
+        <div className={styles.loadingOverlay}>
+          <div style={{ textAlign: "center", padding: "2rem" }}>
+            <p>No slides found. Creating a new slide...</p>
+          </div>
+        </div>
+      )}
 
       <main className={styles.main}>
         <div className={styles.container} style={{ display: "flex", gap: "24px", alignItems: "flex-start" }}>
@@ -2301,7 +3248,7 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                       router.push("/presentations");
                     }}
                   >
-                    Back to Home
+                    Slides Home
                   </button>
                   {isOwner ? (
                     <button
@@ -2316,16 +3263,6 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                       Manage Team
                     </button>
                   ) : null}
-                  <button 
-                    type="button" 
-                    className={styles.shareButton}
-                    onClick={handleShare}
-                  >
-                    Share
-                  </button>
-                  <button type="button" className={styles.slideshowButton} onClick={handleOpenSlideshow}>
-                    Slideshow
-                  </button>
                 </div>
               </div>
             </header>
@@ -2354,13 +3291,14 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                   themeButtonRef={themeButtonRef}
                   onFontFamilyChange={applyFontFamily}
                   onFontSizeChange={applyFontSize}
-                  onBold={toggleBold}
-                  onItalic={toggleItalic}
-                  onUnderline={toggleUnderline}
+                  onBold={handleToggleBold}
+                  onItalic={handleToggleItalic}
+                  onUnderline={handleToggleUnderline}
                   onTextColorSelect={applyTextColor}
                   onHighlightColorSelect={applyHighlightColor}
-                  onAlign={applyAlign}
-                  onList={applyList}
+                  onAlign={(align) => handleSetAlign(align)}
+                  onList={(type) => handleSetListType(type === "bullet" ? "bullets" : "numbers")}
+                  currentFormatting={selectedSlide ? ensureFormatting(selectedSlide.formatting) : undefined}
                   onLineHeightChange={applyLineHeight}
                   onUndo={applyUndo}
                   onRedo={applyRedo}
@@ -2368,16 +3306,16 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                   onRestoreSelection={restoreSelection}
                   lineHeightValue={currentLineHeight}
                   themes={themes}
-                  selectedTheme={selectedThemeName}
+                  selectedTheme={effectiveThemeName}
                   onThemeSelect={handleThemeSelect}
                   isSCDT={isSCDT}
                   slideType={slideType}
                   onSlideTypeSelect={handleSlideTypeSelect}
                   isAIAssistantOpen={showAssistant}
                   onCloseAIAssistant={() => setShowAssistant(false)}
-                  assistantPresentationContext={assistantPresentationContext}
-                  assistantCurrentSlide={assistantCurrentSlide}
-                  assistantAllSlides={assistantAllSlides}
+                  assistantPresentationContext={assistantPresentationContext || undefined}
+                  assistantCurrentSlide={assistantCurrentSlide || undefined}
+                  assistantAllSlides={assistantAllSlides || undefined}
                   onApplyToSlide={(data) => {
                     if (!selectedSlide) return;
                     if (data.content !== undefined) {
@@ -2429,18 +3367,20 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                 <section className={styles.canvasRegion}>
                   <div className={styles.canvasShell}>
                     <div 
-                      className={`${styles.canvasSurface} ${
-                        isSCDTCover ? styles.scdtCoverSlide : 
-                        isSCDTContent ? styles.scdtContentSlide : 
-                        isSCDTEnding ? styles.scdtEndingSlide : ""
-                      }`}
+                      key={`slide-${selectedSlideId}-theme-${effectiveThemeName}-${slideType}`}
+                      className={cx(
+                        styles.canvasSurface,
+                        themeSlideClass && styles[themeSlideClass],
+                        backgroundClass
+                      )}
                       style={{
-                        background: !isSCDT ? activeThemeObj.slideBackground : undefined,
+                        // Only apply theme background if no custom background is set
+                        background: background === "default" && !isSCDT && !isDigitalSolutions && !isAramcoClassic ? activeThemeObj.slideBackground : undefined,
                         border: activeThemeObj.canvasBorder,
                         boxShadow: activeThemeObj.canvasShadow,
                         position: "relative",
                         overflow: "hidden",
-                        ...(isSCDT ? {} : {
+                        ...(isSCDT || isDigitalSolutions || isAramcoClassic ? {} : {
                           display: "flex",
                           flexDirection: "column",
                           alignItems: "center",
@@ -2450,9 +3390,29 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                         }),
                       }}
                     >
-                      {isSCDTCover ? (
+                      {isSCDT && slideType === "cover" ? (
                         /* SCDT Cover Slide */
                         <div className={styles.scdtCoverLayout}>
+                          {/* SCDT Logo in top left */}
+                          <div className={styles.scdtCoverLogoTopLeft}>
+                            <img 
+                              src="/themes/scdt/scdt-logo.png" 
+                              alt="SCDT Logo" 
+                              className={styles.scdtCoverLogoImage}
+                              onError={(e) => {
+                                // Fallback if logo doesn't exist
+                                e.currentTarget.style.display = 'none';
+                              }}
+                            />
+                            <div className={styles.scdtCoverLogoText}>SCDT</div>
+                            <div className={styles.scdtCoverLogoTagline}>SUPPLY CHAIN DIGITAL TWIN</div>
+                          </div>
+                          
+                          {/* Saudi Aramco Logo in top right */}
+                          <div className={styles.themeLogoTopRight}>
+                            <img src="/aramco-digital.png" alt="Saudi Aramco" />
+                          </div>
+                          
                           <div className={styles.scdtCoverTitleArea}>
                             <div
                               ref={titleRef}
@@ -2469,8 +3429,9 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                               onBlur={() => handleContentBlur("title")}
                               data-readonly={isReadOnly}
                             >
-                              {selectedSlide?.title || "Title"}
+                              {selectedSlide?.title || "SCDT Phase 3"}
                             </div>
+                            <div className={styles.scdtCoverTitleUnderline} />
                             <div
                               ref={subtitleRef}
                               className={styles.scdtCoverSubtitle}
@@ -2486,26 +3447,66 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                               onBlur={() => handleContentBlur("subtitle")}
                               data-readonly={isReadOnly}
                             >
-                              {selectedSlide?.subtitle || "Subtitle"}
+                              {selectedSlide?.subtitle || "Aramco Digital team setup and project management"}
                             </div>
                             <div className={styles.scdtCoverDate}>
                               {new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
                             </div>
                           </div>
+                          
+                          {/* Tagline in bottom right */}
+                          <div className={styles.scdtCoverTagline}>
+                            where energy is opportunity
+                          </div>
                         </div>
-                      ) : isSCDTContent ? (
-                        /* SCDT Content Slide - Background image and footer only */
+                      ) : isSCDT && slideType === "content" ? (
+                        /* SCDT Content Slide */
                         <>
-                          <div className={styles.scdtContentLeft}></div>
+                          <div className={styles.scdtContentLeft}>
+                            <div className={styles.scdtContentLeftTitleBox}>
+                              <div
+                                ref={titleRef}
+                                className={styles.slideTitleInput}
+                                contentEditable={!isReadOnly}
+                                suppressContentEditableWarning
+                                role="textbox"
+                                aria-label="Slide title"
+                                onInput={(e) => {
+                                  e.preventDefault();
+                                  handleContentInput("title");
+                                }}
+                                onFocus={() => handleContentFocus("title")}
+                                onBlur={() => handleContentBlur("title")}
+                                data-readonly={isReadOnly}
+                              >
+                                {selectedSlide?.title || "Click to add title"}
+                              </div>
+                            </div>
+                            <div className={styles.scdtContentLeftPageNumber}>
+                              {currentSlideIndex + 1}
+                            </div>
+                          </div>
                           <div className={styles.scdtContentRight}>
-                            <div className={styles.scdtFooter}>
-                              <span className={styles.scdtFooterLine}>© All rights Reserved</span>
-                              <span className={styles.scdtFooterLine}>Aramco Digital: General Use</span>
-                              <span className={styles.scdtFooterLine}>This content has been classified as Aramco Digital: Confidential Use</span>
+                            <div
+                              ref={subtitleRef}
+                              className={styles.slideSubtitleInput}
+                              contentEditable={!isReadOnly}
+                              suppressContentEditableWarning
+                              role="textbox"
+                              aria-label="Slide content"
+                              onInput={(e) => {
+                                e.preventDefault();
+                                handleContentInput("subtitle");
+                              }}
+                              onFocus={() => handleContentFocus("subtitle")}
+                              onBlur={() => handleContentBlur("subtitle")}
+                              data-readonly={isReadOnly}
+                            >
+                              {selectedSlide?.subtitle || selectedSlide?.content || ""}
                             </div>
                           </div>
                         </>
-                      ) : isSCDTEnding ? (
+                      ) : isSCDT && slideType === "ending" ? (
                         /* SCDT Ending Slide - Background image only, no text */
                         <div style={{ 
                           width: "100%", 
@@ -2514,8 +3515,143 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                         }}>
                           {/* Empty - only background image shows */}
                         </div>
-                      ) : (
-                        /* Normal Slide Layout (non-SCDT) */
+                      ) : isDigitalSolutions && slideType === "cover" ? (
+                        /* Digital Solutions Cover Slide */
+                        <div className={styles.digitalSolutionsTitleLayout}>
+                          {/* Logo in top right */}
+                          <div className={styles.themeLogoTopRight}>
+                            <img src="/aramco-digital.png" alt="Aramco Digital" />
+                          </div>
+                          
+                          <div className={styles.digitalSolutionsTitleText}>
+                            <div
+                              ref={titleRef}
+                              className={styles.digitalSolutionsMainTitle}
+                              contentEditable={!isReadOnly}
+                              suppressContentEditableWarning
+                              role="textbox"
+                              aria-label="Slide title"
+                              onInput={(e) => {
+                                e.preventDefault();
+                                handleContentInput("title");
+                              }}
+                              onFocus={() => handleContentFocus("title")}
+                              onBlur={() => handleContentBlur("title")}
+                              data-readonly={isReadOnly}
+                            >
+                              {selectedSlide?.title || "ADOS"}
+                            </div>
+                            <div
+                              ref={subtitleRef}
+                              className={styles.digitalSolutionsSubtitle}
+                              contentEditable={!isReadOnly}
+                              suppressContentEditableWarning
+                              role="textbox"
+                              aria-label="Slide subtitle"
+                              onInput={(e) => {
+                                e.preventDefault();
+                                handleContentInput("subtitle");
+                              }}
+                              onFocus={() => handleContentFocus("subtitle")}
+                              onBlur={() => handleContentBlur("subtitle")}
+                              data-readonly={isReadOnly}
+                            >
+                              {selectedSlide?.subtitle || "Project Status Update"}
+                            </div>
+                          </div>
+                          <div className={styles.digitalSolutionsDateWrapper}>
+                            <div className={styles.digitalSolutionsDate}>
+                              {(() => {
+                                const date = new Date();
+                                const day = date.getDate();
+                                const month = date.toLocaleDateString('en-US', { month: 'long' });
+                                const year = date.getFullYear();
+                                const suffix = day === 1 || day === 21 || day === 31 ? 'st' :
+                                             day === 2 || day === 22 ? 'nd' :
+                                             day === 3 || day === 23 ? 'rd' : 'th';
+                                return `${month} ${day}${suffix}, ${year}`;
+                              })()}
+                            </div>
+                          </div>
+                          
+                          {/* Footer text */}
+                          <div className={styles.digitalSolutionsCoverFooter}>
+                            Aramco Digital: General Use
+                          </div>
+                        </div>
+                      ) : isDigitalSolutions && slideType === "content" ? (
+                        /* Digital Solutions Content Slide */
+                        <div className={styles.digitalSolutionsContentLayout}>
+                          {/* Logo in top right */}
+                          <div className={styles.themeLogoTopRight}>
+                            <img src="/aramco-digital.png" alt="Aramco Digital" />
+                          </div>
+                          
+                          <div
+                            ref={titleRef}
+                            className={styles.slideTitleInput}
+                            contentEditable={!isReadOnly}
+                            suppressContentEditableWarning
+                            role="textbox"
+                            aria-label="Slide title"
+                            onInput={(e) => {
+                              e.preventDefault();
+                              handleContentInput("title");
+                            }}
+                            onFocus={() => handleContentFocus("title")}
+                            onBlur={() => handleContentBlur("title")}
+                            data-readonly={isReadOnly}
+                            style={{
+                              ...getTextStyle("title"),
+                              width: "100%",
+                              textAlign: "left",
+                              color: "#1e293b",
+                              fontSize: "clamp(28px, 3vw, 36px)",
+                              fontWeight: 700,
+                              marginBottom: "24px",
+                            }}
+                          />
+                          
+                          <div
+                            ref={subtitleRef}
+                            className={styles.slideSubtitleInput}
+                            contentEditable={!isReadOnly}
+                            suppressContentEditableWarning
+                            role="textbox"
+                            aria-label="Slide content"
+                            onInput={(e) => {
+                              e.preventDefault();
+                              handleContentInput("subtitle");
+                            }}
+                            onFocus={() => handleContentFocus("subtitle")}
+                            onBlur={() => handleContentBlur("subtitle")}
+                            data-readonly={isReadOnly}
+                            style={{
+                              ...getTextStyle("subtitle"),
+                              width: "100%",
+                              textAlign: "left",
+                              color: "#555555",
+                              fontSize: "clamp(16px, 1.8vw, 20px)",
+                              flex: 1,
+                            }}
+                          />
+                          
+                          {/* Footer */}
+                          <div className={styles.digitalSolutionsContentFooter}>
+                            <div className={styles.digitalSolutionsContentFooterLeft}>
+                              <div>© All rights Reserved</div>
+                              <div>Aramco Digital: General Use</div>
+                            </div>
+                            <div className={styles.digitalSolutionsContentFooterCenter}>
+                              This content has been classified as Aramco Digital: Confidential Use
+                            </div>
+                            <div className={styles.digitalSolutionsContentFooterRight}>
+                              {currentSlideIndex + 1}
+                            </div>
+                          </div>
+                        </div>
+                      ) : isDigitalSolutions && slideType === "ending" ? (
+                        /* Digital Solutions Ending Slide */
                         <>
                           <div
                             ref={titleRef}
@@ -2534,34 +3670,410 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                               ...getTextStyle("title"),
                               width: "100%",
                               textAlign: "center",
+                              color: "#ffffff",
                             }}
                             data-readonly={isReadOnly}
                           />
-                          {/* For AI template: Show subtitle only for title slide, content for other slides */}
-                          {isAITemplate ? (
-                            <>
-                              {/* Title slide: show subtitle */}
-                              {selectedSlide?.subtitle && (
+                        </>
+                      ) : isAramcoClassic && slideType === "cover" ? (
+                        /* Aramco Classic Cover Slide */
+                        <div className={styles.aramcoClassicCoverLayout}>
+                          {/* Logo in top right */}
+                          <div className={styles.themeLogoTopRight}>
+                            <img src="/aramco-digital.png" alt="Aramco Digital" />
+                          </div>
+                          
+                          <div className={styles.aramcoClassicCoverTitleArea}>
+                            <div
+                              ref={titleRef}
+                              className={styles.aramcoClassicCoverTitle}
+                              contentEditable={!isReadOnly}
+                              suppressContentEditableWarning
+                              role="textbox"
+                              aria-label="Slide title"
+                              onInput={(e) => {
+                                e.preventDefault();
+                                handleContentInput("title");
+                              }}
+                              onFocus={() => handleContentFocus("title")}
+                              onBlur={() => handleContentBlur("title")}
+                              data-readonly={isReadOnly}
+                            >
+                              {selectedSlide?.title || "project title (50pt)"}
+                            </div>
+                            <div
+                              ref={subtitleRef}
+                              className={styles.aramcoClassicCoverDescriptor}
+                              contentEditable={!isReadOnly}
+                              suppressContentEditableWarning
+                              role="textbox"
+                              aria-label="Presentation descriptor"
+                              onInput={(e) => {
+                                e.preventDefault();
+                                handleContentInput("subtitle");
+                              }}
+                              onFocus={() => handleContentFocus("subtitle")}
+                              onBlur={() => handleContentBlur("subtitle")}
+                              data-readonly={isReadOnly}
+                            >
+                              {selectedSlide?.subtitle || "Presentation descriptor (12pt)"}
+                            </div>
+                            <div className={styles.aramcoClassicCoverDate}>
+                              {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                            </div>
+                          </div>
+                          
+                          {/* Wave pattern at bottom */}
+                          <div className={styles.aramcoClassicCoverWave} />
+                        </div>
+                      ) : isAramcoClassic && slideType === "content" ? (
+                        /* Aramco Classic Content Slide */
+                        <div className={styles.aramcoClassicContentLayout}>
+                          {/* Logo in top right */}
+                          <div className={styles.themeLogoTopRight}>
+                            <img src="/aramco-digital.png" alt="Aramco Digital" />
+                          </div>
+                          
+                          <div className={styles.aramcoClassicContentHeader}>
+                            <div
+                              ref={titleRef}
+                              className={styles.aramcoClassicContentPageTitle}
+                              contentEditable={!isReadOnly}
+                              suppressContentEditableWarning
+                              role="textbox"
+                              aria-label="Page title"
+                              onInput={(e) => {
+                                e.preventDefault();
+                                handleContentInput("title");
+                              }}
+                              onFocus={() => handleContentFocus("title")}
+                              onBlur={() => handleContentBlur("title")}
+                              data-readonly={isReadOnly}
+                            >
+                              {selectedSlide?.title || "Page title (24pt)"}
+                            </div>
+                            <div
+                              className={styles.aramcoClassicContentPageSubtitle}
+                              contentEditable={!isReadOnly}
+                              suppressContentEditableWarning
+                              role="textbox"
+                              aria-label="Page subtitle"
+                              onInput={(e) => {
+                                e.preventDefault();
+                                const subtitleDiv = e.currentTarget;
+                                updateSlideField("subtitle", subtitleDiv.innerHTML);
+                              }}
+                              onFocus={() => setActiveField("subtitle")}
+                              onBlur={(e) => {
+                                const subtitleDiv = e.currentTarget;
+                                const text = subtitleDiv.textContent?.replace(/\u00a0/g, " ").trim() ?? "";
+                                if (!text) {
+                                  subtitleDiv.innerHTML = "";
+                                  updateSlideField("subtitle", "");
+                                } else {
+                                  updateSlideField("subtitle", subtitleDiv.innerHTML);
+                                }
+                              }}
+                              data-readonly={isReadOnly}
+                              suppressHydrationWarning
+                            >
+                              {selectedSlide?.subtitle || "Page subtitle (24pt)"}
+                            </div>
+                          </div>
+                          
+                          {/* Content body area */}
+                          <div
+                            ref={subtitleRef}
+                            className={styles.aramcoClassicContentBody}
+                            contentEditable={!isReadOnly}
+                            suppressContentEditableWarning
+                            role="textbox"
+                            aria-label="Slide content"
+                            onInput={(e) => {
+                              e.preventDefault();
+                              handleContentInput("subtitle");
+                            }}
+                            onFocus={() => handleContentFocus("subtitle")}
+                            onBlur={() => handleContentBlur("subtitle")}
+                            data-readonly={isReadOnly}
+                          >
+                            {selectedSlide?.content || "This is Body Copy"}
+                          </div>
+                          
+                          {/* Footer with gradient line */}
+                          <div className={styles.aramcoClassicContentFooter}>
+                            <div className={styles.aramcoClassicContentFooterLine}>
+                              {currentSlideIndex + 1}
+                            </div>
+                            <div className={styles.aramcoClassicContentFooterLine}>
+                              {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                            </div>
+                            <div className={styles.aramcoClassicContentFooterLine}>
+                              Copyright note text (8pt)
+                            </div>
+                            <div className={styles.aramcoClassicContentFooterLine}>
+                              Aramco Digital: General Use
+                            </div>
+                          </div>
+                        </div>
+                      ) : isAramcoClassic && slideType === "ending" ? (
+                        /* Aramco Classic Logo Slide */
+                        <div className={styles.plainAramcoLogoContainer}>
+                          <img src="/themes/aramco-logo-classic.png" alt="Aramco" />
+                        </div>
+                      ) : selectedSlide ? (
+                        /* Default / Normal Slide Layout */
+                        (() => {
+                          const layout = selectedSlide.layout ?? "layout2";
+                          const formatting = ensureFormatting(selectedSlide.formatting);
+                          const alignClass =
+                            formatting.align === "center"
+                              ? styles.textAlignCenter
+                              : formatting.align === "right"
+                              ? styles.textAlignRight
+                              : styles.textAlignLeft;
+                          const titleClass = cx(
+                            styles.slideTitleInput,
+                            formatting.bold && styles.textBold,
+                            formatting.italic && styles.textItalic,
+                            formatting.underline && styles.textUnderline,
+                            alignClass
+                          );
+                          const subtitleClass = cx(
+                            styles.slideSubtitleInput,
+                            formatting.bold && styles.textBold,
+                            formatting.italic && styles.textItalic,
+                            formatting.underline && styles.textUnderline,
+                            alignClass
+                          );
+                          
+                          // Layout 1: Title only
+                          if (layout === "layout1") {
+                            return (
+                              <div className={styles.layout1}>
                                 <div
-                                  ref={subtitleRef}
-                                  className={styles.slideSubtitleInput}
+                                  ref={titleRef}
+                                  className={titleClass}
                                   contentEditable={!isReadOnly}
                                   suppressContentEditableWarning
                                   role="textbox"
-                                  aria-label="Slide subtitle"
+                                  aria-label="Slide title"
                                   onInput={(e) => {
                                     e.preventDefault();
-                                    handleContentInput("subtitle");
+                                    handleContentInput("title");
                                   }}
-                                  onFocus={() => handleContentFocus("subtitle")}
-                                  onBlur={() => handleContentBlur("subtitle")}
+                                  onFocus={() => handleContentFocus("title")}
+                                  onBlur={() => handleContentBlur("title")}
                                   style={{
-                                    ...getTextStyle("subtitle"),
+                                    ...getTextStyle("title"),
                                     width: "100%",
                                     textAlign: "center",
                                   }}
                                   data-readonly={isReadOnly}
                                 />
+                              </div>
+                            );
+                          }
+                          
+                          // Layout 3: Two-column text
+                          if (layout === "layout3") {
+                            const content = selectedSlide?.content || "";
+                            
+                            // Check if content contains HTML (img tags)
+                            if (content.includes('<img')) {
+                              // For HTML content, split by double newlines and render in two columns
+                              const parts = content.split(/\n\n+/).filter(part => part.trim().length > 0);
+                              const midPoint = Math.ceil(parts.length / 2);
+                              const leftContent = parts.slice(0, midPoint).join('\n\n');
+                              const rightContent = parts.slice(midPoint).join('\n\n');
+                              
+                              return (
+                                <div className={styles.layout3}>
+                                  <div
+                                    ref={titleRef}
+                                    className={styles.slideTitleInput}
+                                    contentEditable={!isReadOnly}
+                                    suppressContentEditableWarning
+                                    role="textbox"
+                                    aria-label="Slide title"
+                                    onInput={(e) => {
+                                      e.preventDefault();
+                                      handleContentInput("title");
+                                    }}
+                                    onFocus={() => handleContentFocus("title")}
+                                    onBlur={() => handleContentBlur("title")}
+                                    style={{
+                                      ...getTextStyle("title"),
+                                      width: "100%",
+                                      textAlign: "center",
+                                      marginBottom: "clamp(24px, 3vw, 40px)",
+                                    }}
+                                    data-readonly={isReadOnly}
+                                  />
+                                  <div className={styles.layout3Columns}>
+                                    <div className={styles.layout3Column}>
+                                      <div
+                                        className={styles.slideContentHtml}
+                                        dangerouslySetInnerHTML={{ __html: leftContent || "" }}
+                                        style={{
+                                          fontSize: activeThemeObj.bulletFontSize,
+                                          fontWeight: activeThemeObj.bulletFontWeight,
+                                          color: activeThemeObj.bulletColor,
+                                          lineHeight: activeThemeObj.bulletLineHeight,
+                                        }}
+                                      />
+                                    </div>
+                                    <div className={styles.layout3Column}>
+                                      <div
+                                        className={styles.slideContentHtml}
+                                        dangerouslySetInnerHTML={{ __html: rightContent || "" }}
+                                        style={{
+                                          fontSize: activeThemeObj.bulletFontSize,
+                                          fontWeight: activeThemeObj.bulletFontWeight,
+                                          color: activeThemeObj.bulletColor,
+                                          lineHeight: activeThemeObj.bulletLineHeight,
+                                        }}
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            }
+                            
+                            // For text content, split into two columns
+                            const lines = content.split('\n').filter(line => line.trim().length > 0);
+                            const midPoint = Math.ceil(lines.length / 2);
+                            const leftColumn = lines.slice(0, midPoint);
+                            const rightColumn = lines.slice(midPoint);
+                            
+                            return (
+                              <div className={styles.layout3}>
+                                <div
+                                  ref={titleRef}
+                                  className={titleClass}
+                                  contentEditable={!isReadOnly}
+                                  suppressContentEditableWarning
+                                  role="textbox"
+                                  aria-label="Slide title"
+                                  onInput={(e) => {
+                                    e.preventDefault();
+                                    handleContentInput("title");
+                                  }}
+                                  onFocus={() => handleContentFocus("title")}
+                                  onBlur={() => handleContentBlur("title")}
+                                  style={{
+                                    ...getTextStyle("title"),
+                                    width: "100%",
+                                    marginBottom: "clamp(24px, 3vw, 40px)",
+                                  }}
+                                  data-readonly={isReadOnly}
+                                />
+                                <div className={styles.layout3Columns}>
+                                  <div className={styles.layout3Column}>
+                                    {leftColumn.map((line, index) => {
+                                      const trimmed = line.trim();
+                                      if (trimmed.startsWith('•') || trimmed.startsWith('-')) {
+                                        const text = trimmed.substring(1).trim();
+                                        return (
+                                          <div key={`left-${index}`} style={{ marginBottom: "clamp(12px, 1.5vw, 20px)", display: "flex", alignItems: "flex-start" }}>
+                                            <span style={{ marginRight: "0.75rem", fontSize: "1.5em", lineHeight: "1", marginTop: "0.1em", flexShrink: 0, fontWeight: "bold", color: activeThemeObj.titleColor }}>•</span>
+                                            <span style={{ flex: 1, wordBreak: "break-word", fontSize: activeThemeObj.bulletFontSize, fontWeight: activeThemeObj.bulletFontWeight, color: activeThemeObj.bulletColor, lineHeight: activeThemeObj.bulletLineHeight }}>{text}</span>
+                                          </div>
+                                        );
+                                      }
+                                      return (
+                                        <div key={`left-${index}`} style={{ marginBottom: "clamp(12px, 1.5vw, 20px)", fontSize: activeThemeObj.bulletFontSize, fontWeight: activeThemeObj.bulletFontWeight, color: activeThemeObj.bulletColor, lineHeight: activeThemeObj.bulletLineHeight, wordBreak: "break-word" }}>
+                                          {trimmed}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                  <div className={styles.layout3Column}>
+                                    {rightColumn.map((line, index) => {
+                                      const trimmed = line.trim();
+                                      if (trimmed.startsWith('•') || trimmed.startsWith('-')) {
+                                        const text = trimmed.substring(1).trim();
+                                        return (
+                                          <div key={`right-${index}`} style={{ marginBottom: "clamp(12px, 1.5vw, 20px)", display: "flex", alignItems: "flex-start" }}>
+                                            <span style={{ marginRight: "0.75rem", fontSize: "1.5em", lineHeight: "1", marginTop: "0.1em", flexShrink: 0, fontWeight: "bold", color: activeThemeObj.titleColor }}>•</span>
+                                            <span style={{ flex: 1, wordBreak: "break-word", fontSize: activeThemeObj.bulletFontSize, fontWeight: activeThemeObj.bulletFontWeight, color: activeThemeObj.bulletColor, lineHeight: activeThemeObj.bulletLineHeight }}>{text}</span>
+                                          </div>
+                                        );
+                                      }
+                                      return (
+                                        <div key={`right-${index}`} style={{ marginBottom: "clamp(12px, 1.5vw, 20px)", fontSize: activeThemeObj.bulletFontSize, fontWeight: activeThemeObj.bulletFontWeight, color: activeThemeObj.bulletColor, lineHeight: activeThemeObj.bulletLineHeight, wordBreak: "break-word" }}>
+                                          {trimmed}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          }
+                          
+                          // Layout 2: Title + Subtitle (default)
+                          return (
+                            <div className={styles.layout2}>
+                              <div
+                                ref={titleRef}
+                                className={titleClass}
+                                contentEditable={!isReadOnly}
+                                suppressContentEditableWarning
+                                role="textbox"
+                                aria-label="Slide title"
+                                onInput={(e) => {
+                                  e.preventDefault();
+                                  handleContentInput("title");
+                                }}
+                                onFocus={() => handleContentFocus("title")}
+                                onBlur={() => handleContentBlur("title")}
+                                style={{
+                                  ...getTextStyle("title"),
+                                  width: "100%",
+                                }}
+                                data-readonly={isReadOnly}
+                              />
+                              {/* For AI template: Show subtitle only for title slide, content for other slides */}
+                              {isAITemplate ? (
+                            <>
+                              {/* Title slide: show subtitle */}
+                              {selectedSlide?.subtitle && (
+                                formatting.listType === "bullets" || formatting.listType === "numbers" ? (
+                                  formatting.listType === "bullets" ? (
+                                    <ul className={cx(styles.slideList, alignClass)}>
+                                      {(selectedSlide.subtitle || "").split(/\r?\n/).filter(Boolean).map((line, idx) => (
+                                        <li key={idx}>{line}</li>
+                                      ))}
+                                    </ul>
+                                  ) : (
+                                    <ol className={cx(styles.slideList, alignClass)}>
+                                      {(selectedSlide.subtitle || "").split(/\r?\n/).filter(Boolean).map((line, idx) => (
+                                        <li key={idx}>{line}</li>
+                                      ))}
+                                    </ol>
+                                  )
+                                ) : (
+                                  <div
+                                    ref={subtitleRef}
+                                    className={subtitleClass}
+                                    contentEditable={!isReadOnly}
+                                    suppressContentEditableWarning
+                                    role="textbox"
+                                    aria-label="Slide subtitle"
+                                    onInput={(e) => {
+                                      e.preventDefault();
+                                      handleContentInput("subtitle");
+                                    }}
+                                    onFocus={() => handleContentFocus("subtitle")}
+                                    onBlur={() => handleContentBlur("subtitle")}
+                                    style={{
+                                      ...getTextStyle("subtitle"),
+                                      width: "100%",
+                                    }}
+                                    data-readonly={isReadOnly}
+                                  />
+                                )
                               )}
                         {/* Outline slide: show numbered sections */}
                         {selectedSlide?.title === "Outline" && selectedSlide?.content && (
@@ -2578,8 +4090,28 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                             }}
                           >
                             {(() => {
+                              const content = selectedSlide.content;
+                              
+                              // Check if content contains HTML (img tags)
+                              if (content.includes('<img')) {
+                                // Render HTML content
+                                return (
+                                  <div
+                                    className={styles.slideContentHtml}
+                                    dangerouslySetInnerHTML={{ __html: content }}
+                                    style={{
+                                      width: "100%",
+                                      fontSize: activeThemeObj.bulletFontSize,
+                                      fontWeight: activeThemeObj.bulletFontWeight,
+                                      color: activeThemeObj.bulletColor,
+                                      lineHeight: activeThemeObj.bulletLineHeight,
+                                    }}
+                                  />
+                                );
+                              }
+                              
                               // Parse numbered sections (e.g., "1. Overview", "2. Key Concepts")
-                              const lines = selectedSlide.content
+                              const lines = content
                                 .split('\n')
                                 .map(line => line.trim())
                                 .filter(line => line.length > 0);
@@ -2668,8 +4200,28 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                             }}
                           >
                             {(() => {
-                              // Clean and deduplicate content
-                              const lines = selectedSlide.content
+                              const content = selectedSlide.content;
+                              
+                              // Check if content contains HTML (img tags)
+                              if (content.includes('<img')) {
+                                // Render HTML content
+                                return (
+                                  <div
+                                    className={styles.slideContentHtml}
+                                    dangerouslySetInnerHTML={{ __html: content }}
+                                    style={{
+                                      width: "100%",
+                                      fontSize: activeThemeObj.bulletFontSize,
+                                      fontWeight: activeThemeObj.bulletFontWeight,
+                                      color: activeThemeObj.bulletColor,
+                                      lineHeight: activeThemeObj.bulletLineHeight,
+                                    }}
+                                  />
+                                );
+                              }
+                              
+                              // Original text rendering logic
+                              const lines = content
                                 .split('\n')
                                 .map(line => line.trim())
                                 .filter(line => line.length > 0);
@@ -2749,26 +4301,235 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                           ) : (
                             /* Non-AI template: show subtitle normally */
                             selectedSlide?.subtitle && (
-                              <div
-                                ref={subtitleRef}
-                                className={styles.slideSubtitleInput}
-                                contentEditable={!isReadOnly}
-                                suppressContentEditableWarning
-                                role="textbox"
-                                aria-label="Slide subtitle"
-                                onInput={(e) => {
-                                  e.preventDefault();
-                                  handleContentInput("subtitle");
-                                }}
-                                onFocus={() => handleContentFocus("subtitle")}
-                                onBlur={() => handleContentBlur("subtitle")}
-                                style={getTextStyle("subtitle")}
-                                data-readonly={isReadOnly}
-                              />
+                              formatting.listType === "bullets" || formatting.listType === "numbers" ? (
+                                formatting.listType === "bullets" ? (
+                                  <ul className={cx(styles.slideList, alignClass)}>
+                                    {(selectedSlide.subtitle || "").split(/\r?\n/).filter(Boolean).map((line, idx) => (
+                                      <li key={idx}>{line}</li>
+                                    ))}
+                                  </ul>
+                                ) : (
+                                  <ol className={cx(styles.slideList, alignClass)}>
+                                    {(selectedSlide.subtitle || "").split(/\r?\n/).filter(Boolean).map((line, idx) => (
+                                      <li key={idx}>{line}</li>
+                                    ))}
+                                  </ol>
+                                )
+                              ) : (
+                                <div
+                                  ref={subtitleRef}
+                                  className={subtitleClass}
+                                  contentEditable={!isReadOnly}
+                                  suppressContentEditableWarning
+                                  role="textbox"
+                                  aria-label="Slide subtitle"
+                                  onInput={(e) => {
+                                    e.preventDefault();
+                                    handleContentInput("subtitle");
+                                  }}
+                                  onFocus={() => handleContentFocus("subtitle")}
+                                  onBlur={() => handleContentBlur("subtitle")}
+                                  style={getTextStyle("subtitle")}
+                                  data-readonly={isReadOnly}
+                                />
+                              )
                             )
                           )}
-                        </>
+                            </div>
+                          );
+                        })()
+                      ) : (
+                        /* No slide selected - show placeholder */
+                        <div style={{ 
+                          display: "flex", 
+                          alignItems: "center", 
+                          justifyContent: "center", 
+                          height: "100%",
+                          color: "#64748b",
+                          fontSize: "18px"
+                        }}>
+                          No slide selected
+                        </div>
                       )}
+
+                      {/* Draggable/Resizable Image - positioned relative to canvasSurface */}
+                      {selectedSlide?.imageUrl && (() => {
+                        const imageX = selectedSlide.imageX ?? 50;
+                        const imageY = selectedSlide.imageY ?? 50;
+                        const imageWidth = selectedSlide.imageWidth ?? 30;
+                        const imageHeight = selectedSlide.imageHeight ?? 30;
+                        
+                        // Only show border and handles when actively dragging/resizing
+                        const isEditing = isDraggingImage || isResizingImage;
+                        
+                        return (
+                          <div
+                            style={{
+                              position: "absolute",
+                              left: `${imageX}%`,
+                              top: `${imageY}%`,
+                              transform: "translate(-50%, -50%)",
+                              width: `${imageWidth}%`,
+                              height: `${imageHeight}%`,
+                              cursor: isReadOnly ? "default" : isEditing ? "move" : "grab",
+                              zIndex: isEditing ? 20 : 10,
+                            }}
+                            onMouseDown={(e) => {
+                              if (isReadOnly) return;
+                              // Image is a direct child of canvasSurface, so parentElement should be it
+                              const container = e.currentTarget.parentElement;
+                              if (container && container.classList.contains(styles.canvasSurface) && handleImageMouseDownRef.current) {
+                                handleImageMouseDownRef.current(e, container as HTMLElement);
+                              } else {
+                                // Fallback: search up the tree
+                                let parent = e.currentTarget.parentElement;
+                                while (parent && !parent.classList.contains(styles.canvasSurface)) {
+                                  parent = parent.parentElement;
+                                }
+                                if (parent && handleImageMouseDownRef.current) {
+                                  handleImageMouseDownRef.current(e, parent as HTMLElement);
+                                }
+                              }
+                            }}
+                            onMouseEnter={(e) => {
+                              if (!isReadOnly && !isEditing) {
+                                e.currentTarget.style.cursor = "grab";
+                              }
+                            }}
+                            onMouseLeave={(e) => {
+                              if (!isEditing) {
+                                e.currentTarget.style.cursor = "default";
+                              }
+                            }}
+                          >
+                            <img 
+                              src={selectedSlide.imageUrl} 
+                              alt="" 
+                              style={{
+                                width: "100%",
+                                height: "100%",
+                                objectFit: "contain",
+                                borderRadius: "8px",
+                                border: isReadOnly || !isEditing ? "none" : "2px solid #6366f1",
+                                pointerEvents: "none",
+                                userSelect: "none",
+                              }}
+                            />
+                            {!isReadOnly && isEditing && (
+                              <>
+                                {/* Resize handle - only show when editing */}
+                                <div
+                                  style={{
+                                    position: "absolute",
+                                    bottom: "-8px",
+                                    right: "-8px",
+                                    width: "16px",
+                                    height: "16px",
+                                    backgroundColor: "#6366f1",
+                                    border: "2px solid white",
+                                    borderRadius: "50%",
+                                    cursor: "nwse-resize",
+                                    zIndex: 21,
+                                    pointerEvents: "auto",
+                                    boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
+                                  }}
+                                  onMouseDown={(e) => {
+                                    e.stopPropagation();
+                                    // Resize handle -> image div -> canvasSurface
+                                    const imageDiv = e.currentTarget.parentElement?.parentElement;
+                                    const container = imageDiv?.parentElement;
+                                    if (container && container.classList.contains(styles.canvasSurface) && handleImageResizeMouseDownRef.current) {
+                                      handleImageResizeMouseDownRef.current(e, container as HTMLElement);
+                                    } else {
+                                      // Fallback: search up the tree
+                                      let parent = e.currentTarget.parentElement;
+                                      while (parent && !parent.classList.contains(styles.canvasSurface)) {
+                                        parent = parent.parentElement;
+                                      }
+                                      if (parent && handleImageResizeMouseDownRef.current) {
+                                        handleImageResizeMouseDownRef.current(e, parent as HTMLElement);
+                                      }
+                                    }
+                                  }}
+                                />
+                                {/* Delete button - only show when editing */}
+                                <div
+                                  style={{
+                                    position: "absolute",
+                                    top: "-8px",
+                                    right: "-8px",
+                                    width: "20px",
+                                    height: "20px",
+                                    backgroundColor: "#ef4444",
+                                    border: "2px solid white",
+                                    borderRadius: "50%",
+                                    cursor: "pointer",
+                                    zIndex: 21,
+                                    pointerEvents: "auto",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    fontSize: "12px",
+                                    color: "white",
+                                    fontWeight: "bold",
+                                    boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
+                                  }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (confirm("Delete this image?")) {
+                                      void handleDeleteImage();
+                                    }
+                                  }}
+                                  title="Delete image"
+                                >
+                                  ×
+                                </div>
+                              </>
+                            )}
+                            {/* Delete button - always visible but subtle when not editing */}
+                            {!isReadOnly && !isEditing && (
+                              <div
+                                style={{
+                                  position: "absolute",
+                                  top: "-8px",
+                                  right: "-8px",
+                                  width: "20px",
+                                  height: "20px",
+                                  backgroundColor: "rgba(239, 68, 68, 0.7)",
+                                  border: "1px solid rgba(255, 255, 255, 0.8)",
+                                  borderRadius: "50%",
+                                  cursor: "pointer",
+                                  zIndex: 11,
+                                  pointerEvents: "auto",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  fontSize: "12px",
+                                  color: "white",
+                                  fontWeight: "bold",
+                                  opacity: 0,
+                                  transition: "opacity 0.2s ease",
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.opacity = "1";
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.opacity = "0";
+                                }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (confirm("Delete this image?")) {
+                                    void handleDeleteImage();
+                                  }
+                                }}
+                                title="Delete image"
+                              >
+                                ×
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
 
                     </div>
                     <div className={styles.canvasActionBar}>
@@ -2781,10 +4542,10 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                           color: activeThemeObj.buttonPrimaryColor,
                         }}
                         onMouseEnter={(e) => {
-                          e.currentTarget.style.backgroundColor = activeThemeObj.buttonPrimaryHover;
+                          e.currentTarget.style.backgroundColor = activeThemeObj.buttonPrimaryHover || activeThemeObj.buttonPrimaryBg || "";
                         }}
                         onMouseLeave={(e) => {
-                          e.currentTarget.style.backgroundColor = activeThemeObj.buttonPrimaryBg;
+                          e.currentTarget.style.backgroundColor = activeThemeObj.buttonPrimaryBg || "";
                         }}
                       >
                         Save
@@ -2809,10 +4570,10 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
                           color: activeThemeObj.buttonPrimaryColor,
                         }}
                         onMouseEnter={(e) => {
-                          e.currentTarget.style.backgroundColor = activeThemeObj.buttonPrimaryHover;
+                          e.currentTarget.style.backgroundColor = activeThemeObj.buttonPrimaryHover || activeThemeObj.buttonPrimaryBg || "";
                         }}
                         onMouseLeave={(e) => {
-                          e.currentTarget.style.backgroundColor = activeThemeObj.buttonPrimaryBg;
+                          e.currentTarget.style.backgroundColor = activeThemeObj.buttonPrimaryBg || "";
                         }}
                         className={`${styles.canvasActionButton} ${styles.canvasActionSecondary}`}
                       >
@@ -3068,8 +4829,201 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         </div>
       ) : null}
 
-      <TeamChatWidget presentationId={presentationId} canChat={canChat} teamRoles={teamRoles} ownerId={presentationOwnerId} />
-    </>
+      {/* Image Modal */}
+      {isImageModalOpen && (
+        <div className={styles.teamModalOverlay} role="dialog" aria-modal="true" aria-labelledby="image-modal-title">
+          <div className={styles.teamModal}>
+            <div className={styles.teamModalHeader}>
+              <h2 id="image-modal-title">Add image</h2>
+              <button
+                type="button"
+                className={styles.teamModalClose}
+                onClick={() => {
+                  setIsImageModalOpen(false);
+                  setImageFile(null);
+                  setImagePreview("");
+                }}
+                aria-label="Close image modal"
+              >
+                ✕
+              </button>
+            </div>
+            <div className={styles.teamModalSection}>
+              <label htmlFor="image-file-input" className={styles.teamInputLabel}>
+                Select image from your computer
+              </label>
+              <input
+                id="image-file-input"
+                type="file"
+                accept="image/*"
+                className={styles.teamInput}
+                onChange={handleImageFileSelect}
+                style={{ padding: "8px" }}
+              />
+              
+              {/* Preview */}
+              {imagePreview && (
+                <div style={{ marginTop: 16, textAlign: "center" }}>
+                  <img 
+                    src={imagePreview} 
+                    alt="Preview" 
+                    style={{ 
+                      maxWidth: "100%", 
+                      maxHeight: "300px", 
+                      borderRadius: "8px",
+                      border: "1px solid #e5e7eb"
+                    }} 
+                  />
+                </div>
+              )}
+
+              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16, gap: 8 }}>
+                <button
+                  type="button"
+                  className={styles.teamRemoveButton}
+                  onClick={() => {
+                    setIsImageModalOpen(false);
+                    setImageFile(null);
+                    setImagePreview("");
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className={styles.teamAddButton}
+                  onClick={() => void handleSaveImage()}
+                  disabled={!imageFile}
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Background Modal */}
+      {isBackgroundModalOpen && (
+        <div className={styles.teamModalOverlay} role="dialog" aria-modal="true" aria-labelledby="background-modal-title">
+          <div className={styles.teamModal}>
+            <div className={styles.teamModalHeader}>
+              <h2 id="background-modal-title">Slide background</h2>
+              <button
+                type="button"
+                className={styles.teamModalClose}
+                onClick={() => setIsBackgroundModalOpen(false)}
+                aria-label="Close background modal"
+              >
+                ✕
+              </button>
+            </div>
+            <div className={styles.teamModalSection}>
+              <div className={styles.backgroundOptions}>
+                <button
+                  type="button"
+                  className={styles.backgroundOption}
+                  onClick={() => void handleSetBackgroundStyle("default")}
+                  style={{
+                    backgroundColor: presentationBackground === "default" ? "#e0e7ff" : "#f3f4f6",
+                    borderColor: presentationBackground === "default" ? "#6366f1" : "#d1d5db",
+                  }}
+                >
+                  Default
+                </button>
+                <button
+                  type="button"
+                  className={styles.backgroundOption}
+                  onClick={() => void handleSetBackgroundStyle("soft")}
+                  style={{
+                    backgroundColor: presentationBackground === "soft" ? "#e0e7ff" : "#f3f4f6",
+                    borderColor: presentationBackground === "soft" ? "#6366f1" : "#d1d5db",
+                  }}
+                >
+                  Soft
+                </button>
+                <button
+                  type="button"
+                  className={styles.backgroundOption}
+                  onClick={() => void handleSetBackgroundStyle("dark")}
+                  style={{
+                    backgroundColor: presentationBackground === "dark" ? "#e0e7ff" : "#f3f4f6",
+                    borderColor: presentationBackground === "dark" ? "#6366f1" : "#d1d5db",
+                  }}
+                >
+                  Dark
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Layout Modal */}
+      {isLayoutModalOpen && (
+        <div className={styles.teamModalOverlay} role="dialog" aria-modal="true" aria-labelledby="layout-modal-title">
+          <div className={styles.teamModal}>
+            <div className={styles.teamModalHeader}>
+              <h2 id="layout-modal-title">Slide layout</h2>
+              <button
+                type="button"
+                className={styles.teamModalClose}
+                onClick={() => setIsLayoutModalOpen(false)}
+                aria-label="Close layout modal"
+              >
+                ✕
+              </button>
+            </div>
+            <div className={styles.teamModalSection}>
+              <div className={styles.layoutOptions}>
+                <button
+                  type="button"
+                  className={styles.layoutOption}
+                  onClick={() => void handleSetLayout("layout1")}
+                  style={{
+                    backgroundColor: selectedSlide?.layout === "layout1" ? "#e0e7ff" : "#f3f4f6",
+                    borderColor: selectedSlide?.layout === "layout1" ? "#6366f1" : "#d1d5db",
+                  }}
+                >
+                  Title only
+                </button>
+                <button
+                  type="button"
+                  className={styles.layoutOption}
+                  onClick={() => void handleSetLayout("layout2")}
+                  style={{
+                    backgroundColor: (selectedSlide?.layout === "layout2" || !selectedSlide?.layout) ? "#e0e7ff" : "#f3f4f6",
+                    borderColor: (selectedSlide?.layout === "layout2" || !selectedSlide?.layout) ? "#6366f1" : "#d1d5db",
+                  }}
+                >
+                  Title + Subtitle
+                </button>
+                <button
+                  type="button"
+                  className={styles.layoutOption}
+                  onClick={() => void handleSetLayout("layout3")}
+                  style={{
+                    backgroundColor: selectedSlide?.layout === "layout3" ? "#e0e7ff" : "#f3f4f6",
+                    borderColor: selectedSlide?.layout === "layout3" ? "#6366f1" : "#d1d5db",
+                  }}
+                >
+                  Two-column text
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <TeamChatWidget 
+        presentationId={presentationId} 
+        canChat={canChat} 
+        teamRoles={teamRoles} 
+        ownerId={presentationOwnerId}
+        currentUserId={resolvedUserId}
+        currentUserEmail={resolvedUserEmail}
+      />
+    </div>
   );
 }
 

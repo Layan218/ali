@@ -34,38 +34,48 @@ export default function LoginPage() {
   }
 
   async function ensureUserDocument(uid: string, emailAddress: string | null | undefined) {
-    const userRef = doc(db, "users", uid);
-    const snapshot = await getDoc(userRef);
-    if (!snapshot.exists()) {
-      await setDoc(userRef, {
-        uid,
-        email: emailAddress ?? email,
-        role: "editor",
-        createdAt: serverTimestamp(),
-      });
-    } else {
-      // Update displayName if it exists in Firestore
-      const userData = snapshot.data();
-      if (userData?.displayName && typeof window !== "undefined") {
-        const stored = readStoredUser();
-        if (stored) {
-          const payload = { ...stored, displayName: userData.displayName };
-          window.localStorage.setItem("authUser", JSON.stringify(payload));
-          window.dispatchEvent(new Event("auth:updated"));
+    try {
+      const userRef = doc(db, "users", uid);
+      const snapshot = await getDoc(userRef);
+      if (!snapshot.exists()) {
+        await setDoc(userRef, {
+          uid,
+          email: emailAddress ?? email,
+          role: "editor",
+          createdAt: serverTimestamp(),
+        });
+      } else {
+        // Update displayName if it exists in Firestore
+        const userData = snapshot.data();
+        if (userData?.displayName && typeof window !== "undefined") {
+          const stored = readStoredUser();
+          if (stored) {
+            const payload = { ...stored, displayName: userData.displayName };
+            window.localStorage.setItem("authUser", JSON.stringify(payload));
+            window.dispatchEvent(new Event("auth:updated"));
+          }
         }
       }
+    } catch (error) {
+      console.error("Firestore error (ensureUserDocument):", error);
+      throw error;
     }
   }
 
   async function createUserDocument(uid: string, emailAddress: string | null | undefined, name: string) {
-    const userRef = doc(db, "users", uid);
-    await setDoc(userRef, {
-      uid,
-      email: emailAddress ?? email,
-      displayName: name,
-      role: "editor",
-      createdAt: serverTimestamp(),
-    });
+    try {
+      const userRef = doc(db, "users", uid);
+      await setDoc(userRef, {
+        uid,
+        email: emailAddress ?? email,
+        displayName: name,
+        role: "editor",
+        createdAt: serverTimestamp(),
+      });
+    } catch (error) {
+      console.error("Firestore error (createUserDocument):", error);
+      throw error;
+    }
   }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -95,14 +105,36 @@ export default function LoginPage() {
 
     setIsSubmitting(true);
     try {
+      // Validate Firebase is properly initialized
+      if (!auth || !auth.app) {
+        throw new Error("Firebase Auth is not initialized. Please check your configuration.");
+      }
+
       if (mode === "login") {
-        const result = await signInWithEmailAndPassword(auth, email, password);
+        let result;
+        try {
+          result = await signInWithEmailAndPassword(auth, email, password);
+        } catch (error) {
+          console.error("Firebase Auth error (signInWithEmailAndPassword):", error);
+          throw error;
+        }
         const user = result.user;
-        await ensureUserDocument(user.uid, user.email);
+        try {
+          await ensureUserDocument(user.uid, user.email);
+        } catch (error) {
+          console.error("Firestore error (ensureUserDocument):", error);
+          // Continue even if this fails
+        }
         // Fetch user profile from Firestore to get displayName
-        const userRef = doc(db, "users", user.uid);
-        const userSnap = await getDoc(userRef);
-        const userData = userSnap.data();
+        let userSnap;
+        try {
+          const userRef = doc(db, "users", user.uid);
+          userSnap = await getDoc(userRef);
+        } catch (error) {
+          console.error("Firestore error (getDoc user):", error);
+          userSnap = null;
+        }
+        const userData = userSnap?.data();
         if (typeof window !== "undefined") {
           const payload = {
             uid: user.uid,
@@ -117,13 +149,29 @@ export default function LoginPage() {
           window.dispatchEvent(new Event("auth:updated"));
         }
       } else {
-        const result = await createUserWithEmailAndPassword(auth, email, password);
+        let result;
+        try {
+          result = await createUserWithEmailAndPassword(auth, email, password);
+        } catch (error) {
+          console.error("Firebase Auth error (createUserWithEmailAndPassword):", error);
+          throw error;
+        }
         const user = result.user;
         const trimmedName = displayName.trim();
         // Update Firebase Auth profile
-        await updateProfile(user, { displayName: trimmedName });
+        try {
+          await updateProfile(user, { displayName: trimmedName });
+        } catch (error) {
+          console.error("Firebase Auth error (updateProfile):", error);
+          // Continue even if this fails
+        }
         // Save to Firestore
-        await createUserDocument(user.uid, user.email, trimmedName);
+        try {
+          await createUserDocument(user.uid, user.email, trimmedName);
+        } catch (error) {
+          console.error("Firestore error (createUserDocument):", error);
+          // Continue even if this fails
+        }
         if (typeof window !== "undefined") {
           const payload = {
             uid: user.uid,
@@ -140,12 +188,35 @@ export default function LoginPage() {
       }
 
       router.push("/presentations");
-      router.push("/presentations");
-    } catch (submitError) {
-      const message =
-        submitError instanceof Error && submitError.message
-          ? submitError.message
-          : "Unable to process your request. Please try again.";
+    } catch (submitError: unknown) {
+      console.error("Authentication error:", submitError);
+      
+      let message = "Unable to process your request. Please try again.";
+      
+      if (submitError instanceof Error) {
+        const errorCode = (submitError as any).code;
+        const errorMessage = submitError.message;
+        
+        // Handle specific Firebase Auth errors
+        if (errorCode === "auth/network-request-failed") {
+          message = "Network error. Please check your internet connection and ensure Firebase is properly configured. If the problem persists, verify that 'localhost' is added to your Firebase authorized domains.";
+        } else if (errorCode === "auth/invalid-api-key") {
+          message = "Invalid Firebase API key. Please check your environment variables.";
+        } else if (errorCode === "auth/invalid-credential") {
+          message = "Invalid email or password. Please try again.";
+        } else if (errorCode === "auth/user-not-found") {
+          message = "No account found with this email address.";
+        } else if (errorCode === "auth/wrong-password") {
+          message = "Incorrect password. Please try again.";
+        } else if (errorCode === "auth/email-already-in-use") {
+          message = "This email is already registered. Please sign in instead.";
+        } else if (errorCode === "auth/weak-password") {
+          message = "Password is too weak. Please use a stronger password.";
+        } else if (errorMessage) {
+          message = errorMessage;
+        }
+      }
+      
       setError(message);
     } finally {
       setIsSubmitting(false);

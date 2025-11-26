@@ -2,7 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode, type MouseEvent } from "react";
 import { useRouter } from "next/navigation";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import {
+  collection,
+  addDoc,
+  getDocs,
+  query as firestoreQuery,
+  orderBy,
+  serverTimestamp
+} from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
 import { logAuditEvent } from "@/lib/audit";
@@ -18,6 +25,7 @@ import { useAuth } from "@/context/AuthContext";
 import { encryptText } from "@/lib/encryption";
 import { useTheme } from "@/hooks/useTheme";
 import { generatePresentation, type AIPresentationSlide } from "@/services/aiPresentationService";
+import { createDefaultFormatting } from "@/utils/formattingUtils";
 
 type TemplateCard = {
   id: string;
@@ -220,7 +228,7 @@ export default function PresentationsHome() {
 
 
   const goToPresentation = (presentationId: string) => {
-    router.push(`/editor?presentationId=${encodeURIComponent(presentationId)}&slideId=slide-1`);
+    router.push(`/editor/${encodeURIComponent(presentationId)}?slideId=slide-1`);
   };
 
   const goToDashboard = (event?: MouseEvent<HTMLElement>) => {
@@ -395,6 +403,7 @@ export default function PresentationsHome() {
             notes: slide.notes ? encryptText(slide.notes) : encryptText(""),
             theme: "Digital Solutions – Black", // Default theme for all slides
             templateId: "ai-modern",
+            formatting: createDefaultFormatting(),
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
           };
@@ -433,12 +442,23 @@ export default function PresentationsHome() {
         },
       });
 
+      // Verify slides were created before navigation (avoid race condition)
+      const slidesRef = collection(db, "presentations", presentationId, "slides");
+      const slidesQuery = firestoreQuery(slidesRef, orderBy("order", "asc"));
+      const slidesSnap = await getDocs(slidesQuery);
+      
+      if (slidesSnap.empty) {
+        throw new Error("Failed to create slides - no slides found after creation");
+      }
+
       // Close modal before navigation
       closeAIModal();
       
-      // Navigate to editor using the correct route format
-      const slideId = firstSlideId || "slide-1";
-      router.push(`/editor/${encodeURIComponent(presentationId)}?slideId=${encodeURIComponent(slideId)}`);
+      // Navigate to editor using the real Firestore-generated slide ID
+      if (!firstSlideId) {
+        throw new Error("Failed to create first slide - no slide ID available");
+      }
+      router.push(`/editor/${encodeURIComponent(presentationId)}?slideId=${encodeURIComponent(firstSlideId)}`);
     } catch (error) {
       console.error("Failed to create AI presentation", error);
       const errorMessage = error instanceof Error ? error.message : "Failed to create presentation. Please try again.";
@@ -530,15 +550,27 @@ export default function PresentationsHome() {
       });
       const presentationId = presentationRef.id;
 
-      await addDoc(collection(db, "presentations", presentationId, "slides"), {
+      // Create the first slide with proper formatting and structure
+      const slideRef = await addDoc(collection(db, "presentations", presentationId, "slides"), {
         order: 1,
         title: "Slide 1",
-        content: "",
-        notes: "",
+        subtitle: encryptText(""),
+        notes: encryptText(""),
         theme: "default",
+        formatting: createDefaultFormatting(),
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
+      const firstSlideId = slideRef.id;
+
+      // Verify the slide was created before navigation (avoid race condition)
+      const slidesRef = collection(db, "presentations", presentationId, "slides");
+      const slidesQuery = firestoreQuery(slidesRef, orderBy("order", "asc"));
+      const slidesSnap = await getDocs(slidesQuery);
+      
+      if (slidesSnap.empty) {
+        throw new Error("Failed to create slide - slide not found after creation");
+      }
 
       recordPresentationDraft(presentationId, templateName);
 
@@ -553,7 +585,8 @@ export default function PresentationsHome() {
         },
       });
 
-      router.push(`/editor/${encodeURIComponent(presentationId)}?presentationId=${encodeURIComponent(presentationId)}&slideId=slide-1`);
+      // Navigate using the real Firestore-generated slide ID
+      router.push(`/editor/${encodeURIComponent(presentationId)}?slideId=${encodeURIComponent(firstSlideId)}`);
     } catch (error) {
       console.error("Failed to create presentation", error);
     }

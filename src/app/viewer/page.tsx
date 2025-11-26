@@ -2,9 +2,13 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { collection, getDocs, orderBy, query, doc, getDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { decryptText } from "@/lib/encryption";
 import { demoSlides } from "@/data/demoSlides";
 import { useTheme } from "@/hooks/useTheme";
 import styles from "./viewer.module.css";
+import editorStyles from "@/app/editor/[id]/editor.module.css";
 
 type DemoSlide = typeof demoSlides[number];
 
@@ -14,12 +18,18 @@ type ViewerSlide = {
   subtitle?: string;
   notes?: string;
   presentationId?: string;
+  imageUrl?: string;
+  imageX?: number;
+  imageY?: number;
+  imageWidth?: number;
+  imageHeight?: number;
 };
 
 type ViewerState = {
   presentationId?: string | null;
   slideId?: string | null;
   presentationTitle?: string;
+  presentationBackground?: "default" | "soft" | "dark";
   slides?: ViewerSlide[];
 };
 
@@ -51,6 +61,11 @@ const normalizeSlide = (slide: ViewerSlide | DemoSlide | undefined): ViewerSlide
     subtitle: slide.subtitle ?? "",
     notes: viewerSlide.notes ?? "",
     presentationId: (slide as DemoSlide).presentationId ?? undefined,
+    imageUrl: viewerSlide.imageUrl,
+    imageX: viewerSlide.imageX,
+    imageY: viewerSlide.imageY,
+    imageWidth: viewerSlide.imageWidth,
+    imageHeight: viewerSlide.imageHeight,
   };
 };
 
@@ -62,46 +77,244 @@ function ViewerContent() {
   const queryPresentationId = searchParams.get("presentationId");
 
   const [viewerState, setViewerState] = useState<ViewerState | null>(null);
+  const [slides, setSlides] = useState<ViewerSlide[]>([]);
+  const [presentationTitle, setPresentationTitle] = useState<string>("Presentation Mode");
+  const [presentationBackground, setPresentationBackground] = useState<"default" | "soft" | "dark">("default");
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasLoadedSlides, setHasLoadedSlides] = useState(false);
 
+  // Load viewer state from sessionStorage and slides from Firestore
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      const raw = window.sessionStorage.getItem(VIEWER_STATE_KEY);
-      if (!raw) {
-        setViewerState(null);
+    if (hasLoadedSlides) return; // Prevent multiple loads
+
+    const loadViewerData = async () => {
+      setIsLoading(true);
+      
+      let storedState: ViewerState | null = null;
+      let presentationId: string | null = null;
+      
+      // First, try to load from sessionStorage
+      if (typeof window !== "undefined") {
+        try {
+          const raw = window.sessionStorage.getItem(VIEWER_STATE_KEY);
+          if (raw) {
+            storedState = JSON.parse(raw) as ViewerState;
+            setViewerState(storedState);
+            
+            // If slides are already in state, use them
+            if (storedState.slides && storedState.slides.length > 0) {
+              setSlides(storedState.slides);
+              if (storedState.presentationTitle) {
+                setPresentationTitle(storedState.presentationTitle);
+              }
+              if (storedState.presentationBackground) {
+                setPresentationBackground(storedState.presentationBackground);
+              }
+              setIsLoading(false);
+              setHasLoadedSlides(true);
+              return;
+            }
+            
+            presentationId = storedState.presentationId || null;
+          }
+        } catch (error) {
+          console.error("Failed to load viewer state", error);
+        }
+      }
+
+      // If no slides in sessionStorage, load from Firestore
+      if (!presentationId) {
+        presentationId = queryPresentationId || null;
+      }
+      
+      if (!presentationId) {
+        // Fallback to demo slides if no presentationId
+        setSlides(getSlidesForPresentation(null));
+        setIsLoading(false);
+        setHasLoadedSlides(true);
         return;
       }
-      const parsed = JSON.parse(raw) as ViewerState;
-      setViewerState(parsed);
-    } catch (error) {
-      console.error("Failed to load viewer state", error);
-      setViewerState(null);
-    }
-  }, []);
 
-  const slides = useMemo<ViewerSlide[]>(() => {
-    if (viewerState?.slides && viewerState.slides.length > 0) {
-      return viewerState.slides.map((slide, index) => ({
-        id: slide.id || `slide-${index + 1}`,
-        title: slide.title ?? "Untitled slide",
-        subtitle: slide.subtitle ?? "",
-        notes: slide.notes ?? "",
-      }));
-    }
-    return getSlidesForPresentation(queryPresentationId);
-  }, [viewerState, queryPresentationId]);
+      try {
+        // Load presentation title and background
+        const presentationRef = doc(db, "presentations", presentationId as string);
+        const presentationSnap = await getDoc(presentationRef);
+        if (presentationSnap.exists()) {
+          const presentationData = presentationSnap.data();
+          if (presentationData?.title) {
+            setPresentationTitle(presentationData.title);
+          }
+          if (presentationData?.background && typeof presentationData.background === "string") {
+            if (presentationData.background === "default" || presentationData.background === "soft" || presentationData.background === "dark") {
+              setPresentationBackground(presentationData.background);
+            }
+          }
+        }
 
-  const initialSlideId = viewerState?.slideId ?? querySlideId;
+        // Load slides
+        const slidesRef = collection(db, "presentations", presentationId as string, "slides");
+        const slidesQuery = query(slidesRef, orderBy("order", "asc"));
+        const snapshot = await getDocs(slidesQuery);
+
+        if (snapshot.empty) {
+          // Fallback to demo slides if no slides found
+          setSlides(getSlidesForPresentation(presentationId));
+          setIsLoading(false);
+          setHasLoadedSlides(true);
+          return;
+        }
+
+        const loadedSlides: ViewerSlide[] = snapshot.docs.map((docSnap) => {
+          const data = docSnap.data();
+          const rawContent = typeof data.content === "string" ? data.content : "";
+          const rawNotes = typeof data.notes === "string" ? data.notes : "";
+          
+          // Safely decrypt content
+          let decryptedContent = "";
+          if (rawContent) {
+            try {
+              // Check if content looks encrypted (CryptoJS encrypted strings start with "U2FsdGVk")
+              const looksEncrypted = rawContent.startsWith("U2FsdGVk");
+              
+              if (looksEncrypted) {
+                // Try to decrypt
+                const decrypted = decryptText(rawContent);
+                // If decryptText returns the same string or still looks encrypted, decryption failed
+                if (decrypted === rawContent || (decrypted && decrypted.startsWith("U2FsdGVk"))) {
+                  // Decryption failed - the function returned the encrypted string unchanged
+                  // This means the content couldn't be decrypted, so use empty and fall back to subtitle
+                  console.warn("Failed to decrypt content - decryption returned encrypted string");
+                  decryptedContent = "";
+                } else {
+                  // Decryption succeeded
+                  decryptedContent = decrypted || "";
+                }
+              } else {
+                // Content doesn't look encrypted, use it as-is (might be plain text)
+                decryptedContent = rawContent;
+              }
+            } catch (error) {
+              // If decryption fails with exception, use empty and fall back to subtitle
+              console.warn("Failed to decrypt content:", error);
+              decryptedContent = "";
+            }
+          }
+          
+          // Safely decrypt notes
+          let decryptedNotes = "";
+          if (rawNotes) {
+            try {
+              // Check if notes look encrypted
+              const looksEncrypted = rawNotes.startsWith("U2FsdGVk");
+              
+              if (looksEncrypted) {
+                // Try to decrypt
+                const decrypted = decryptText(rawNotes);
+                // If decryptText returns the same string or still looks encrypted, decryption failed
+                if (decrypted === rawNotes || (decrypted && decrypted.startsWith("U2FsdGVk"))) {
+                  // Decryption failed
+                  console.warn("Failed to decrypt notes - decryption returned encrypted string");
+                  decryptedNotes = "";
+                } else {
+                  // Decryption succeeded
+                  decryptedNotes = decrypted || "";
+                }
+              } else {
+                // Notes don't look encrypted, use as-is (might be plain text)
+                decryptedNotes = rawNotes;
+              }
+            } catch (error) {
+              // If decryption fails with exception, use empty
+              console.warn("Failed to decrypt notes:", error);
+              decryptedNotes = "";
+            }
+          }
+
+          // Build final content - prefer decrypted content, then subtitle field, then empty
+          const finalContent =
+            decryptedContent ||
+            (typeof data.subtitle === "string" ? data.subtitle : "") ||
+            "";
+
+          const slideData = {
+            id: docSnap.id,
+            title: typeof data.title === "string" ? data.title : "Untitled slide",
+            subtitle: finalContent,
+            notes: decryptedNotes || "",
+            presentationId: presentationId as string,
+            imageUrl: typeof data.imageUrl === "string" && data.imageUrl.length > 0 ? data.imageUrl : undefined,
+            imageX: typeof data.imageX === "number" ? data.imageX : undefined,
+            imageY: typeof data.imageY === "number" ? data.imageY : undefined,
+            imageWidth: typeof data.imageWidth === "number" ? data.imageWidth : undefined,
+            imageHeight: typeof data.imageHeight === "number" ? data.imageHeight : undefined,
+          };
+          
+          // Debug: Log image data if present
+          if (slideData.imageUrl) {
+            console.log("Viewer: Loaded slide with image", {
+              slideId: slideData.id,
+              hasImageUrl: !!slideData.imageUrl,
+              imageX: slideData.imageX,
+              imageY: slideData.imageY,
+              imageWidth: slideData.imageWidth,
+              imageHeight: slideData.imageHeight,
+            });
+          }
+          
+          return slideData;
+        });
+
+        setSlides(loadedSlides);
+      } catch (error) {
+        console.error("Failed to load slides from Firestore:", error);
+        // Fallback to demo slides on error
+        setSlides(getSlidesForPresentation(presentationId));
+      } finally {
+        setIsLoading(false);
+        setHasLoadedSlides(true);
+      }
+    };
+
+    void loadViewerData();
+  }, [queryPresentationId, hasLoadedSlides]);
+
+  // Get initial slide ID from viewerState, sessionStorage, or query params
+  const initialSlideId = useMemo(() => {
+    if (viewerState?.slideId) return viewerState.slideId;
+    if (typeof window !== "undefined") {
+      try {
+        const raw = window.sessionStorage.getItem(VIEWER_STATE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw) as ViewerState;
+          if (parsed.slideId) return parsed.slideId;
+        }
+      } catch {
+        // Ignore errors
+      }
+    }
+    return querySlideId;
+  }, [viewerState, querySlideId]);
+
   const [index, setIndex] = useState(() => findSlideIndex(slides, initialSlideId));
 
   useEffect(() => {
-    setIndex(findSlideIndex(slides, initialSlideId));
+    if (slides.length > 0) {
+      setIndex(findSlideIndex(slides, initialSlideId));
+    }
   }, [slides, initialSlideId]);
 
   const slide = normalizeSlide(slides[index]);
 
   const totalSlides = slides.length > 0 ? slides.length : 1;
   const slidePosition = `${Math.min(index + 1, totalSlides)} of ${totalSlides}`;
+
+  // Get background class based on presentation background
+  const backgroundClass =
+    presentationBackground === "soft"
+      ? editorStyles.softBackground
+      : presentationBackground === "dark"
+      ? editorStyles.darkBackground
+      : editorStyles.defaultBackground;
 
   const slideRef = useRef<HTMLElement>(null);
 
@@ -195,7 +408,7 @@ function ViewerContent() {
       <header className={styles.viewerHeader}>
         <div className={styles.headerLeft}>
           <span className={styles.presentationTitle}>
-            {viewerState?.presentationTitle ?? "Presentation Mode"}
+            {presentationTitle}
           </span>
         </div>
         <div className={styles.headerCenter}>
@@ -215,10 +428,68 @@ function ViewerContent() {
       </header>
 
       <main className={styles.viewerMain}>
-        <article ref={slideRef} className={`${styles.slideCard} ${styles.slideCardActive}`}>
-          <h1 className={styles.slideTitle}>{slide.title}</h1>
-          <p className={styles.slideContent}>{slide.subtitle}</p>
-        </article>
+        {isLoading ? (
+          <div style={{ padding: 24, fontFamily: "Calibri, Arial, sans-serif", textAlign: "center" }}>
+            Loading presentation…
+          </div>
+        ) : (
+          <article ref={slideRef} className={`${styles.slideCard} ${styles.slideCardActive} ${backgroundClass}`} style={{ position: "relative", overflow: "visible" }}>
+            <h1 className={styles.slideTitle}>{slide.title}</h1>
+            <div 
+              className={styles.slideContent}
+              dangerouslySetInnerHTML={{ __html: slide.subtitle || "<p>Click to add content</p>" }}
+            />
+            {/* Image display */}
+            {slide.imageUrl && (() => {
+              const imageX = slide.imageX ?? 50;
+              const imageY = slide.imageY ?? 50;
+              const imageWidth = slide.imageWidth ?? 30;
+              const imageHeight = slide.imageHeight ?? 30;
+              
+              console.log("Viewer: Rendering image", {
+                imageUrl: slide.imageUrl?.substring(0, 50) + "...",
+                imageX,
+                imageY,
+                imageWidth,
+                imageHeight,
+              });
+              
+              return (
+                <div
+                  style={{
+                    position: "absolute",
+                    left: `${imageX}%`,
+                    top: `${imageY}%`,
+                    transform: "translate(-50%, -50%)",
+                    width: `${imageWidth}%`,
+                    height: `${imageHeight}%`,
+                    zIndex: 10,
+                    pointerEvents: "none",
+                  }}
+                >
+                  <img 
+                    src={slide.imageUrl} 
+                    alt="" 
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "contain",
+                      borderRadius: "8px",
+                      display: "block",
+                    }}
+                    onError={(e) => {
+                      console.error("Failed to load image:", slide.imageUrl);
+                      (e.target as HTMLImageElement).style.display = "none";
+                    }}
+                    onLoad={() => {
+                      console.log("Image loaded successfully in viewer");
+                    }}
+                  />
+                </div>
+              );
+            })()}
+          </article>
+        )}
       </main>
 
       <footer className={styles.viewerFooter}>

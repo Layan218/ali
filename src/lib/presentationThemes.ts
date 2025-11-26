@@ -1,9 +1,9 @@
 /**
  * Professional Presentation Themes
- * Three themes for presentations: Default (original), SCDT, and Digital Solutions
+ * Four themes for presentations: Default, SCDT, Digital Solutions, and Aramco Classic
  */
 
-export type ThemeId = "scdt" | "digital-solutions" | "supply-chain" | "aramco-classic";
+export type ThemeId = "default" | "scdt" | "digital-solutions" | "aramco-classic";
 export type SlideType = "cover" | "content" | "ending";
 
 export interface PresentationTheme {
@@ -12,6 +12,11 @@ export interface PresentationTheme {
   slideBackground: string;
   accentColor: string;
   textColor: string;
+  slideLayouts: {
+    cover: string;
+    content: string;
+    ending: string;
+  };
   // Keep other properties for backward compatibility
   titleFontSize?: string;
   titleFontWeight?: number;
@@ -38,69 +43,96 @@ export interface PresentationTheme {
 }
 
 export const presentationThemes: Record<ThemeId, PresentationTheme> = {
+  default: {
+    id: "default",
+    name: "Default",
+    slideBackground: "#ffffff",
+    accentColor: "#6366f1",
+    textColor: "#1e293b",
+    slideLayouts: {
+      cover: "defaultCoverSlide",
+      content: "defaultContentSlide",
+      ending: "defaultEndingSlide",
+    },
+    titleFontSize: "clamp(32px, 3.5vw, 48px)",
+    titleFontWeight: 600,
+    titleColor: "#1e293b",
+    titleLineHeight: 1.2,
+    bulletFontSize: "clamp(16px, 1.8vw, 20px)",
+    bulletFontWeight: 400,
+    bulletColor: "#1e293b",
+    bulletLineHeight: 1.6,
+    buttonPrimaryBg: "#6366f1",
+    buttonPrimaryColor: "#ffffff",
+    buttonPrimaryHover: "#4f46e5",
+    buttonSecondaryBg: "transparent",
+    buttonSecondaryColor: "#6366f1",
+    buttonSecondaryBorder: "#6366f1",
+    swatch: "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)",
+  },
   scdt: {
     id: "scdt",
     name: "SCDT",
     slideBackground: "#001b3a",
     accentColor: "#00b388",
     textColor: "#ffffff",
-    titleFontSize: "clamp(28px, 3vw, 40px)",
-    titleFontWeight: 600,
-    titleColor: "#1b3a4b",
+    slideLayouts: {
+      cover: "scdtCoverSlide",
+      content: "scdtContentSlide",
+      ending: "scdtEndingSlide",
+    },
+    titleFontSize: "clamp(40px, 4.5vw, 56px)",
+    titleFontWeight: 700,
+    titleColor: "#ffffff",
     titleLineHeight: 1.2,
     bulletFontSize: "clamp(16px, 1.8vw, 20px)",
     bulletFontWeight: 400,
     bulletColor: "#1b3a4b",
     bulletLineHeight: 1.6,
+    bodyFontSize: "clamp(16px, 1.8vw, 20px)",
+    bodyColor: "#1b3a4b",
     buttonPrimaryBg: "#00b388",
     buttonPrimaryColor: "#ffffff",
     buttonPrimaryHover: "#00a078",
     buttonSecondaryBg: "transparent",
     buttonSecondaryColor: "#00b388",
     buttonSecondaryBorder: "#00b388",
+    canvasBg: "#ffffff",
+    canvasBorder: "1px solid rgba(0, 0, 0, 0.1)",
+    canvasShadow: "0 2px 8px rgba(0, 0, 0, 0.1)",
+    swatch: "linear-gradient(135deg, #1b3a4b 0%, #00b388 100%)",
   },
   "digital-solutions": {
     id: "digital-solutions",
     name: "Digital Solutions",
     slideBackground: "#000000",
-    accentColor: "#33FF99",
+    accentColor: "#00FF00",
     textColor: "#ffffff",
-    titleFontSize: "clamp(32px, 3.5vw, 48px)",
-    titleFontWeight: 600,
-    titleColor: "#333333",
+    slideLayouts: {
+      cover: "digitalSolutionsCoverSlide",
+      content: "digitalSolutionsContentSlide",
+      ending: "digitalSolutionsEndingSlide",
+    },
+    titleFontSize: "clamp(40px, 5vw, 64px)",
+    titleFontWeight: 700,
+    titleColor: "#00FF00",
     titleLineHeight: 1.2,
     bulletFontSize: "clamp(16px, 1.8vw, 20px)",
     bulletFontWeight: 400,
-    bulletColor: "#333333",
+    bulletColor: "#555555",
     bulletLineHeight: 1.6,
-    buttonPrimaryBg: "#33FF99",
+    bodyFontSize: "clamp(16px, 1.8vw, 20px)",
+    bodyColor: "#555555",
+    buttonPrimaryBg: "#00FF00",
     buttonPrimaryColor: "#000000",
-    buttonPrimaryHover: "#28E085",
+    buttonPrimaryHover: "#00CC00",
     buttonSecondaryBg: "transparent",
-    buttonSecondaryColor: "#33FF99",
-    buttonSecondaryBorder: "#33FF99",
-  },
-  "supply-chain": {
-    id: "supply-chain",
-    name: "Supply Chain",
-    slideBackground: "#001b3a",
-    accentColor: "#22c55e",
-    textColor: "#ffffff",
-    titleFontSize: "clamp(28px, 3vw, 40px)",
-    titleFontWeight: 600,
-    titleColor: "#ffffff",
-    titleLineHeight: 1.2,
-    bulletFontSize: "clamp(16px, 1.8vw, 20px)",
-    bulletFontWeight: 400,
-    bulletColor: "#ffffff",
-    bulletLineHeight: 1.6,
-    buttonPrimaryBg: "#22c55e",
-    buttonPrimaryColor: "#ffffff",
-    buttonPrimaryHover: "#16a34a",
-    buttonSecondaryBg: "transparent",
-    buttonSecondaryColor: "#22c55e",
-    buttonSecondaryBorder: "#22c55e",
-    swatch: "linear-gradient(135deg, #0f172a 0%, #22c55e 100%)",
+    buttonSecondaryColor: "#00FF00",
+    buttonSecondaryBorder: "#00FF00",
+    canvasBg: "#ffffff",
+    canvasBorder: "1px solid rgba(0, 0, 0, 0.1)",
+    canvasShadow: "0 2px 8px rgba(0, 0, 0, 0.1)",
+    swatch: "linear-gradient(135deg, #000000 0%, #33FF99 100%)",
   },
   "aramco-classic": {
     id: "aramco-classic",
@@ -108,16 +140,36 @@ export const presentationThemes: Record<ThemeId, PresentationTheme> = {
     slideBackground: "#ffffff",
     accentColor: "#65b32e",
     textColor: "#555555",
-    titleFontSize: "clamp(28px, 3vw, 40px)",
-    bodyFontSize: "16px",
+    slideLayouts: {
+      cover: "aramcoClassicCoverSlide",
+      content: "aramcoClassicContentSlide",
+      ending: "aramcoClassicLogoSlide",
+    },
+    titleFontSize: "clamp(32px, 3.5vw, 50px)",
+    titleFontWeight: 400,
     titleColor: "#555555",
+    titleLineHeight: 1.2,
+    bulletFontSize: "clamp(14px, 1.5vw, 16px)",
+    bulletFontWeight: 400,
+    bulletColor: "#555555",
+    bulletLineHeight: 1.6,
+    bodyFontSize: "16px",
     bodyColor: "#555555",
+    buttonPrimaryBg: "#65b32e",
+    buttonPrimaryColor: "#ffffff",
+    buttonPrimaryHover: "#5a9e28",
+    buttonSecondaryBg: "transparent",
+    buttonSecondaryColor: "#65b32e",
+    buttonSecondaryBorder: "#65b32e",
+    canvasBg: "#ffffff",
+    canvasBorder: "1px solid rgba(0, 0, 0, 0.1)",
+    canvasShadow: "0 2px 8px rgba(0, 0, 0, 0.1)",
     swatch: "linear-gradient(90deg, #65b32e 0%, #00a0c6 100%)",
   },
 };
 
 export function getThemeById(id: ThemeId | string): PresentationTheme {
-  return presentationThemes[id as ThemeId] || presentationThemes["scdt"];
+  return presentationThemes[id as ThemeId] || presentationThemes["default"];
 }
 
 export function getThemeByName(name: string): PresentationTheme | null {
@@ -125,5 +177,5 @@ export function getThemeByName(name: string): PresentationTheme | null {
   return found || null;
 }
 
-export const defaultThemeId: ThemeId = "scdt";
+export const defaultThemeId: ThemeId = "default";
 

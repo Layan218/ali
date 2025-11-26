@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { collection, getDocs, orderBy, query } from "firebase/firestore";
+import { collection, getDocs, orderBy, query, doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { decryptText } from "@/lib/encryption";
 import styles from "@/app/editor/[id]/editor.module.css";
@@ -15,6 +15,11 @@ type PresentSlide = {
   content: string;
   notes: string;
   theme: string;
+  imageUrl?: string;
+  imageX?: number;
+  imageY?: number;
+  imageWidth?: number;
+  imageHeight?: number;
 };
 
 export default function PresentPage() {
@@ -26,6 +31,7 @@ export default function PresentPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [activeIndex, setActiveIndex] = useState(Number.isNaN(initialIndex) ? 0 : initialIndex);
+  const [presentationBackground, setPresentationBackground] = useState<"default" | "soft" | "dark">("default");
 
   useEffect(() => {
     setActiveIndex(Number.isNaN(initialIndex) ? 0 : initialIndex);
@@ -43,6 +49,18 @@ export default function PresentPage() {
       setErrorMessage(null);
 
       try {
+        // Load presentation background
+        const presentationRef = doc(db, "presentations", presentationId);
+        const presentationSnap = await getDoc(presentationRef);
+        if (presentationSnap.exists()) {
+          const presentationData = presentationSnap.data();
+          if (presentationData?.background && typeof presentationData.background === "string") {
+            if (presentationData.background === "default" || presentationData.background === "soft" || presentationData.background === "dark") {
+              setPresentationBackground(presentationData.background);
+            }
+          }
+        }
+
         const slidesRef = collection(db, "presentations", presentationId, "slides");
         const slidesQuery = query(slidesRef, orderBy("order", "asc"));
         const snapshot = await getDocs(slidesQuery);
@@ -67,14 +85,33 @@ export default function PresentPage() {
             "";
           const finalNotes = decryptedNotes || rawNotes || "";
 
-          return {
+          const slideData = {
             id: docSnap.id,
             order: typeof data.order === "number" ? data.order : index + 1,
             title: typeof data.title === "string" ? data.title : "",
             content: finalContent,
             notes: finalNotes,
             theme: typeof data.theme === "string" ? data.theme : "default",
+            imageUrl: typeof data.imageUrl === "string" && data.imageUrl.length > 0 ? data.imageUrl : undefined,
+            imageX: typeof data.imageX === "number" ? data.imageX : undefined,
+            imageY: typeof data.imageY === "number" ? data.imageY : undefined,
+            imageWidth: typeof data.imageWidth === "number" ? data.imageWidth : undefined,
+            imageHeight: typeof data.imageHeight === "number" ? data.imageHeight : undefined,
           };
+          
+          // Debug: Log image data if present
+          if (slideData.imageUrl) {
+            console.log("Present: Loaded slide with image", {
+              slideId: slideData.id,
+              hasImageUrl: !!slideData.imageUrl,
+              imageX: slideData.imageX,
+              imageY: slideData.imageY,
+              imageWidth: slideData.imageWidth,
+              imageHeight: slideData.imageHeight,
+            });
+          }
+          
+          return slideData;
         });
 
         setSlides(loadedSlides);
@@ -99,6 +136,14 @@ export default function PresentPage() {
     () => (totalSlides > 0 && activeIndex >= 0 && activeIndex < totalSlides ? slides[activeIndex] : null),
     [slides, activeIndex, totalSlides]
   );
+
+  // Get background class based on presentation background
+  const backgroundClass =
+    presentationBackground === "soft"
+      ? styles.softBackground
+      : presentationBackground === "dark"
+      ? styles.darkBackground
+      : styles.defaultBackground;
 
   const handleNavigate = (nextIndex: number) => {
     if (nextIndex < 0 || nextIndex >= totalSlides) return;
@@ -146,12 +191,61 @@ export default function PresentPage() {
         ) : errorMessage ? (
           <div className={styles.presentationModeEmpty}>{errorMessage}</div>
         ) : activeSlide ? (
-          <article className={styles.presentationModeSlide}>
+          <article className={`${styles.presentationModeSlide} ${backgroundClass}`} style={{ position: "relative" }}>
             <h1 className={styles.presentationModeTitle}>{activeSlide.title || "Untitled slide"}</h1>
             <div
               className={styles.presentationModeContent}
               dangerouslySetInnerHTML={{ __html: activeSlide.content || "<p>Click to add content</p>" }}
             />
+            {/* Image display */}
+            {activeSlide.imageUrl && (() => {
+              const imageX = activeSlide.imageX ?? 50;
+              const imageY = activeSlide.imageY ?? 50;
+              const imageWidth = activeSlide.imageWidth ?? 30;
+              const imageHeight = activeSlide.imageHeight ?? 30;
+              
+              console.log("Present: Rendering image", {
+                imageUrl: activeSlide.imageUrl?.substring(0, 50) + "...",
+                imageX,
+                imageY,
+                imageWidth,
+                imageHeight,
+              });
+              
+              return (
+                <div
+                  style={{
+                    position: "absolute",
+                    left: `${imageX}%`,
+                    top: `${imageY}%`,
+                    transform: "translate(-50%, -50%)",
+                    width: `${imageWidth}%`,
+                    height: `${imageHeight}%`,
+                    zIndex: 10,
+                    pointerEvents: "none",
+                  }}
+                >
+                  <img 
+                    src={activeSlide.imageUrl} 
+                    alt="" 
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "contain",
+                      borderRadius: "8px",
+                      display: "block",
+                    }}
+                    onError={(e) => {
+                      console.error("Failed to load image in present mode:", activeSlide.imageUrl);
+                      (e.target as HTMLImageElement).style.display = "none";
+                    }}
+                    onLoad={() => {
+                      console.log("Image loaded successfully in present mode");
+                    }}
+                  />
+                </div>
+              );
+            })()}
             {activeSlide.notes ? (
               <section className={styles.presentationModeNotes}>
                 <h2>Presenter Notes</h2>

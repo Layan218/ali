@@ -342,13 +342,6 @@ function DashboardContent() {
           >
             Slides Home
           </button>
-          <button
-            type="button"
-            className={styles.secondary}
-            onClick={() => router.push("/")}
-          >
-            Back to Home
-          </button>
         </div>
       </nav>
 
@@ -407,7 +400,7 @@ function DashboardContent() {
                               className={styles.outlineButton}
                               onClick={(event) => {
                                 event.stopPropagation();
-                                router.push(`/editor?presentationId=${encodeURIComponent(presentation.id)}&slideId=slide-1`);
+                                router.push(`/editor/${encodeURIComponent(presentation.id)}?slideId=slide-1`);
                               }}
                             >
                               Edit

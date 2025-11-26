@@ -80,6 +80,13 @@ type EditorToolbarProps = {
   assistantCurrentSlide?: SlideContent | null;
   assistantAllSlides?: SlideContent[];
   onApplyToSlide?: (data: { content?: string; notes?: string }) => void;
+  currentFormatting?: {
+    bold?: boolean;
+    italic?: boolean;
+    underline?: boolean;
+    align?: "left" | "center" | "right";
+    listType?: "none" | "bullets" | "numbers";
+  };
 };
 
 const ALIGN_OPTIONS: AlignOption[] = ["left", "center", "right"];
@@ -103,6 +110,7 @@ export default function EditorToolbar({
   toolbarActions,
   toolbarDisabled,
   commandState,
+  currentFormatting,
   highlightIndicatorStyle,
   colorOptions,
   highlightOptions,
@@ -232,15 +240,51 @@ export default function EditorToolbar({
     }
   }, [isThemePickerOpen]);
 
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
+
+  // Handle click outside to close theme dropdown
+  useEffect(() => {
+    if (!isThemePickerOpen) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      // Check if click is outside both the button and the dropdown
+      const isOutsideButton = themeButtonElementRef.current && !themeButtonElementRef.current.contains(target);
+      const isOutsideDropdown = dropdownRef.current && !dropdownRef.current.contains(target);
+      
+      // Also check if the click is on a theme dropdown item (should not close)
+      const isThemeItem = target.closest(`.${styles.themeDropdownItem}`);
+      
+      if (isOutsideButton && isOutsideDropdown && !isThemeItem) {
+        onToggleThemePicker();
+      }
+    };
+
+    // Use a small delay to avoid immediate closure when opening
+    const timeoutId = setTimeout(() => {
+      document.addEventListener("click", handleClickOutside, true);
+    }, 100);
+
+    return () => {
+      clearTimeout(timeoutId);
+      document.removeEventListener("click", handleClickOutside, true);
+    };
+  }, [isThemePickerOpen, onToggleThemePicker]);
+
   const renderDropdown = () => {
-    if (!isThemePickerOpen || toolbarDisabled || !dropdownPosition) return null;
+    if (!isThemePickerOpen || !dropdownPosition) return null;
 
     const dropdownContent = (
       <div
+        ref={dropdownRef}
         className={styles.themeDropdown}
         style={{
           top: `${dropdownPosition.top}px`,
           left: `${dropdownPosition.left}px`,
+        }}
+        onClick={(e) => {
+          // Prevent clicks inside dropdown from closing it
+          e.stopPropagation();
         }}
       >
         {themes.map((theme) => {
@@ -250,8 +294,18 @@ export default function EditorToolbar({
               key={theme.name}
               type="button"
               className={`${styles.themeDropdownItem} ${isActive ? styles.themeDropdownItemActive : ""}`}
-              onClick={() => {
-                onThemeSelect(theme.name);
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log("🎯 Theme button clicked:", theme.name);
+                // Call theme select handler immediately - this MUST happen synchronously
+                if (onThemeSelect) {
+                  console.log("✅ Calling onThemeSelect with:", theme.name);
+                  onThemeSelect(theme.name);
+                } else {
+                  console.error("❌ onThemeSelect is not defined!");
+                }
+                // Close dropdown immediately
                 onToggleThemePicker();
               }}
               aria-pressed={isActive}
@@ -359,7 +413,7 @@ export default function EditorToolbar({
                 onClick={onToggleThemePicker}
                 aria-expanded={isThemePickerOpen}
                 aria-label="Select theme"
-                disabled={toolbarDisabled}
+                disabled={false}
               >
                 <span>{themes.find((t) => t.name === selectedTheme)?.name || "Theme"}</span>
                 <span className={styles.toolbarThemeArrow}>{isThemePickerOpen ? "▲" : "▼"}</span>
@@ -389,30 +443,30 @@ export default function EditorToolbar({
           <div className={styles.toolbarGroup}>
             <button
               type="button"
-              className={`${styles.toolbarButton} ${commandState.bold ? styles.toolbarButtonActive : ""}`}
+              className={`${styles.toolbarButton} ${(currentFormatting?.bold ?? commandState.bold) ? styles.toolbarButtonActive : ""}`}
               onMouseDown={onToolbarMouseDown}
               onClick={onBold}
-              aria-pressed={commandState.bold}
+              aria-pressed={currentFormatting?.bold ?? commandState.bold}
               disabled={toolbarDisabled}
             >
               B
             </button>
             <button
               type="button"
-              className={`${styles.toolbarButton} ${commandState.italic ? styles.toolbarButtonActive : ""}`}
+              className={`${styles.toolbarButton} ${(currentFormatting?.italic ?? commandState.italic) ? styles.toolbarButtonActive : ""}`}
               onMouseDown={onToolbarMouseDown}
               onClick={onItalic}
-              aria-pressed={commandState.italic}
+              aria-pressed={currentFormatting?.italic ?? commandState.italic}
               disabled={toolbarDisabled}
             >
               <em>I</em>
             </button>
             <button
               type="button"
-              className={`${styles.toolbarButton} ${commandState.underline ? styles.toolbarButtonActive : ""}`}
+              className={`${styles.toolbarButton} ${(currentFormatting?.underline ?? commandState.underline) ? styles.toolbarButtonActive : ""}`}
               onMouseDown={onToolbarMouseDown}
               onClick={onUnderline}
-              aria-pressed={commandState.underline}
+              aria-pressed={currentFormatting?.underline ?? commandState.underline}
               disabled={toolbarDisabled}
             >
               <span className={styles.toolbarUnderline}>U</span>
@@ -492,35 +546,40 @@ export default function EditorToolbar({
 
         <div className={`${styles.toolbarSection} ${styles.toolbarSectionCompact}`}>
           <div className={styles.toolbarGroup}>
-            {ALIGN_OPTIONS.map((align) => (
-              <button
-                type="button"
-                key={align}
-                className={`${styles.toolbarButton} ${commandState.align === align ? styles.toolbarButtonActive : ""}`}
-                onMouseDown={onToolbarMouseDown}
-                onClick={() => onAlign(align)}
-                aria-pressed={commandState.align === align}
-                disabled={toolbarDisabled}
-              >
-                {alignGlyph(align)}
-              </button>
-            ))}
+            {ALIGN_OPTIONS.map((align) => {
+              const isActive = currentFormatting?.align !== undefined 
+                ? currentFormatting.align === align 
+                : commandState.align === align;
+              return (
+                <button
+                  type="button"
+                  key={align}
+                  className={`${styles.toolbarButton} ${isActive ? styles.toolbarButtonActive : ""}`}
+                  onMouseDown={onToolbarMouseDown}
+                  onClick={() => onAlign(align)}
+                  aria-pressed={isActive}
+                  disabled={toolbarDisabled}
+                >
+                  {alignGlyph(align)}
+                </button>
+              );
+            })}
             <button
               type="button"
-              className={`${styles.toolbarButton} ${commandState.listType === "bullet" ? styles.toolbarButtonActive : ""}`}
+              className={`${styles.toolbarButton} ${(currentFormatting?.listType === "bullets" || (!currentFormatting && commandState.listType === "bullet")) ? styles.toolbarButtonActive : ""}`}
               onMouseDown={onToolbarMouseDown}
               onClick={() => onList("bullet")}
-              aria-pressed={commandState.listType === "bullet"}
+              aria-pressed={currentFormatting?.listType === "bullets" || (!currentFormatting && commandState.listType === "bullet")}
               disabled={toolbarDisabled}
             >
               •
             </button>
             <button
               type="button"
-              className={`${styles.toolbarButton} ${commandState.listType === "number" ? styles.toolbarButtonActive : ""}`}
+              className={`${styles.toolbarButton} ${(currentFormatting?.listType === "numbers" || (!currentFormatting && commandState.listType === "number")) ? styles.toolbarButtonActive : ""}`}
               onMouseDown={onToolbarMouseDown}
               onClick={() => onList("number")}
-              aria-pressed={commandState.listType === "number"}
+              aria-pressed={currentFormatting?.listType === "numbers" || (!currentFormatting && commandState.listType === "number")}
               disabled={toolbarDisabled}
             >
               1.
@@ -561,8 +620,16 @@ export default function EditorToolbar({
               ref={button === "AI Assistant" ? aiAssistantButtonRef : null}
               className={styles.toolbarButton}
               onMouseDown={onToolbarMouseDown}
-              onClick={() => toolbarActions[button]?.()}
-              disabled={toolbarDisabled && (button === "Image" || button === "Background")}
+              onClick={() => {
+                if (toolbarDisabled && button !== "Theme" && button !== "AI Assistant") return;
+                const action = toolbarActions[button];
+                if (action) {
+                  action();
+                } else {
+                  console.log(`${button} feature coming soon`);
+                }
+              }}
+              disabled={toolbarDisabled && button !== "Theme" && button !== "AI Assistant"}
               style={
                 button === "AI Assistant" && isAIAssistantOpen
                   ? {

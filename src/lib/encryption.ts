@@ -19,31 +19,38 @@ export function encryptText(text: string) {
 export function decryptText(cipher: string) {
   if (!cipher) return "";
   
-  // If secret is not configured, assume plain text
+  // Check if text looks encrypted (CryptoJS encrypted strings start with "U2FsdGVk")
+  const looksEncrypted = cipher.startsWith("U2FsdGVk");
+  
+  // If it doesn't look encrypted, return as-is (it's plain text)
+  if (!looksEncrypted) {
+    return cipher;
+  }
+  
+  // If secret is not configured, can't decrypt - return original
   if (!SECRET || SECRET === "default-secret-key") {
     return cipher;
   }
   
+  // Try to decrypt
   try {
-    // Check if the cipher looks like encrypted data (CryptoJS encrypted strings are base64-like)
-    // Encrypted strings typically contain base64 characters and are usually longer
-    // However, we'll try to decrypt first and validate the result
-    
     const bytes = CryptoJS.AES.decrypt(cipher, SECRET);
     const decrypted = bytes.toString(CryptoJS.enc.Utf8);
     
     // Check if decryption was successful
-    // If decrypted result is empty, it probably wasn't encrypted or decryption failed
-    if (!decrypted || decrypted.length === 0) {
-      // Decryption failed or produced empty result, return original
+    // If decrypted result is empty or still looks encrypted, decryption failed
+    if (!decrypted || decrypted.length === 0 || decrypted.startsWith("U2FsdGVk")) {
+      // Decryption failed - return original
       return cipher;
     }
     
-    // Validate that the decrypted text is valid and meaningful
-    // Check if it contains valid printable characters (including Arabic, etc.)
-    // If the decrypted text is much shorter than original, it might be invalid
+    // Validate that the decrypted text is reasonable
+    // Check if it contains valid printable characters
     const hasValidChars = /[\u0020-\u007E\u00A0-\uFFFF]/.test(decrypted);
-    const reasonableLength = decrypted.length >= cipher.length * 0.3; // At least 30% of original length
+    
+    // For very short text, be more lenient with length check
+    const minLength = cipher.length < 50 ? 1 : Math.max(1, cipher.length * 0.1);
+    const reasonableLength = decrypted.length >= minLength;
     
     if (!hasValidChars || !reasonableLength) {
       // Decrypted text doesn't look valid, return original
@@ -52,8 +59,7 @@ export function decryptText(cipher: string) {
     
     return decrypted;
   } catch (e) {
-    // If decryption fails with an exception, assume it's plain text
-    // This handles "Malformed UTF-8 data" and other decryption errors
+    // If decryption fails with an exception, return original
     return cipher;
   }
 }
