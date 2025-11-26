@@ -307,6 +307,14 @@ export default function PresentationsHome() {
       return;
     }
 
+    const userEmail = currentUser.email;
+    if (!userEmail || !userEmail.includes('@')) {
+      console.error('Invalid email for Firebase Auth:', userEmail);
+      setAiError("User email is invalid. Please sign out and sign in again.");
+      setIsAIGenerating(false);
+      return;
+    }
+
     try {
       // Generate slides using the new AI service with timeout protection
       let generatedSlides: AIPresentationSlide[] = [];
@@ -433,7 +441,7 @@ export default function PresentationsHome() {
       await logAuditEvent({
         presentationId,
         userId: currentUser.uid,
-        userEmail: currentUser.email ?? null,
+        userEmail: userEmail,
         action: "CREATE_PRESENTATION",
         details: {
           title: aiTitle,
@@ -538,6 +546,13 @@ export default function PresentationsHome() {
       return;
     }
 
+    const userEmail = currentUser.email;
+    if (!userEmail || !userEmail.includes('@')) {
+      console.error('Invalid email for Firebase Auth:', userEmail);
+      alert("User email is invalid. Please sign out and sign in again.");
+      return;
+    }
+
     try {
       // Create presentation - private by default (only in recent presentations, not in team dashboard)
       const presentationRef = await addDoc(collection(db, "presentations"), {
@@ -577,7 +592,7 @@ export default function PresentationsHome() {
       await logAuditEvent({
         presentationId,
         userId: currentUser.uid,
-        userEmail: currentUser.email ?? null,
+        userEmail: userEmail,
         action: "CREATE_PRESENTATION",
         details: {
           title: templateName,

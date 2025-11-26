@@ -264,10 +264,17 @@ export default function TeamChatWidget({
       return;
     }
 
+    const userEmail = currentUser.email;
+    if (!userEmail || !userEmail.includes('@')) {
+      console.error('Invalid email for Firebase Auth:', userEmail);
+      setAccessMessage("User email is invalid. Please sign out and sign in again.");
+      return;
+    }
+
     try {
       setIsSending(true);
       // Fetch user profile to get displayName
-      let displayName = currentUser.displayName || currentUser.email || "User";
+      let displayName = currentUser.displayName || userEmail || "User";
       try {
         const userRef = doc(db, "users", currentUser.uid);
         const userSnap = await getDoc(userRef);
@@ -291,7 +298,7 @@ export default function TeamChatWidget({
       await logAuditEvent({
         presentationId,
         userId: currentUser.uid,
-        userEmail: currentUser.email ?? null,
+        userEmail: userEmail,
         action: "SEND_CHAT_MESSAGE",
         details: { messageId: messageDoc.id },
       });

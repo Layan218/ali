@@ -38,9 +38,14 @@ export default function LoginPage() {
       const userRef = doc(db, "users", uid);
       const snapshot = await getDoc(userRef);
       if (!snapshot.exists()) {
+        const safeEmail = emailAddress && emailAddress.includes('@') ? emailAddress : (email && email.includes('@') ? email : null);
+        if (!safeEmail) {
+          console.error('Invalid email for ensureUserDocument:', emailAddress, email);
+          throw new Error('Invalid email address');
+        }
         await setDoc(userRef, {
           uid,
-          email: emailAddress ?? email,
+          email: safeEmail,
           role: "editor",
           createdAt: serverTimestamp(),
         });
@@ -64,10 +69,15 @@ export default function LoginPage() {
 
   async function createUserDocument(uid: string, emailAddress: string | null | undefined, name: string) {
     try {
+      const safeEmail = emailAddress && emailAddress.includes('@') ? emailAddress : (email && email.includes('@') ? email : null);
+      if (!safeEmail) {
+        console.error('Invalid email for createUserDocument:', emailAddress, email);
+        throw new Error('Invalid email address');
+      }
       const userRef = doc(db, "users", uid);
       await setDoc(userRef, {
         uid,
-        email: emailAddress ?? email,
+        email: safeEmail,
         displayName: name,
         role: "editor",
         createdAt: serverTimestamp(),
@@ -84,6 +94,13 @@ export default function LoginPage() {
 
     if (!email || !password) {
       setError("Please enter both email and password.");
+      return;
+    }
+
+    // Validate email format before Firebase Auth calls
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail || !trimmedEmail.includes('@')) {
+      setError("Please enter a valid email address.");
       return;
     }
 
@@ -113,14 +130,21 @@ export default function LoginPage() {
       if (mode === "login") {
         let result;
         try {
-          result = await signInWithEmailAndPassword(auth, email, password);
+          result = await signInWithEmailAndPassword(auth, trimmedEmail, password);
         } catch (error) {
           console.error("Firebase Auth error (signInWithEmailAndPassword):", error);
           throw error;
         }
         const user = result.user;
+        const userEmail = user?.email;
+        if (!userEmail || !userEmail.includes('@')) {
+          console.error('Invalid email for Firebase Auth:', userEmail);
+          setError("Authentication succeeded but user email is invalid. Please contact support.");
+          setIsSubmitting(false);
+          return;
+        }
         try {
-          await ensureUserDocument(user.uid, user.email);
+          await ensureUserDocument(user.uid, userEmail);
         } catch (error) {
           console.error("Firestore error (ensureUserDocument):", error);
           // Continue even if this fails
@@ -136,9 +160,16 @@ export default function LoginPage() {
         }
         const userData = userSnap?.data();
         if (typeof window !== "undefined") {
+          const safeEmail = userEmail || trimmedEmail;
+          if (!safeEmail || !safeEmail.includes('@')) {
+            console.error('Invalid email for localStorage:', safeEmail);
+            setError("Cannot save user data: invalid email. Please contact support.");
+            setIsSubmitting(false);
+            return;
+          }
           const payload = {
             uid: user.uid,
-            email: user.email ?? email,
+            email: safeEmail,
             displayName: userData?.displayName || user.displayName || null,
             role: "editor",
           };
@@ -151,12 +182,19 @@ export default function LoginPage() {
       } else {
         let result;
         try {
-          result = await createUserWithEmailAndPassword(auth, email, password);
+          result = await createUserWithEmailAndPassword(auth, trimmedEmail, password);
         } catch (error) {
           console.error("Firebase Auth error (createUserWithEmailAndPassword):", error);
           throw error;
         }
         const user = result.user;
+        const userEmail = user?.email;
+        if (!userEmail || !userEmail.includes('@')) {
+          console.error('Invalid email for Firebase Auth:', userEmail);
+          setError("Account created but user email is invalid. Please contact support.");
+          setIsSubmitting(false);
+          return;
+        }
         const trimmedName = displayName.trim();
         // Update Firebase Auth profile
         try {
@@ -167,7 +205,7 @@ export default function LoginPage() {
         }
         // Save to Firestore
         try {
-          await createUserDocument(user.uid, user.email, trimmedName);
+          await createUserDocument(user.uid, userEmail, trimmedName);
         } catch (error) {
           console.error("Firestore error (createUserDocument):", error);
           // Continue even if this fails
@@ -175,7 +213,7 @@ export default function LoginPage() {
         if (typeof window !== "undefined") {
           const payload = {
             uid: user.uid,
-            email: user.email ?? email,
+            email: userEmail,
             displayName: trimmedName,
             role: "editor",
           };

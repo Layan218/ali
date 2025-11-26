@@ -111,7 +111,10 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
   const [ownerDisplayName, setOwnerDisplayName] = useState<string | null>(null);
   const [collaboratorDisplayNames, setCollaboratorDisplayNames] = useState<Record<string, string>>({});
   const [firebaseUserId, setFirebaseUserId] = useState<string | null>(auth.currentUser?.uid ?? null);
-  const [firebaseUserEmail, setFirebaseUserEmail] = useState<string | null>(auth.currentUser?.email ?? null);
+  const initialEmail = auth.currentUser?.email;
+  const [firebaseUserEmail, setFirebaseUserEmail] = useState<string | null>(
+    initialEmail && initialEmail.includes('@') ? initialEmail : null
+  );
   const [isTeamModalOpen, setIsTeamModalOpen] = useState(false);
   const [newCollaboratorValue, setNewCollaboratorValue] = useState("");
   const [teamModalError, setTeamModalError] = useState<string | null>(null);
@@ -1903,13 +1906,19 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
 
 
       const currentUser = auth.currentUser;
-      await logAuditEvent({
-        presentationId,
-        userId: currentUser?.uid ?? null,
-        userEmail: currentUser?.email ?? null,
-        action: "ADD_SLIDE",
-        details: { slideId: newSlideId, order: nextOrder },
-      });
+      const userEmail = currentUser?.email;
+      if (currentUser && (!userEmail || !userEmail.includes('@'))) {
+        console.error('Invalid email for Firebase Auth:', userEmail);
+        // Continue without logging audit event if email is invalid
+      } else {
+        await logAuditEvent({
+          presentationId,
+          userId: currentUser?.uid ?? null,
+          userEmail: userEmail ?? null,
+          action: "ADD_SLIDE",
+          details: { slideId: newSlideId, order: nextOrder },
+        });
+      }
 
       setSlides((prev) => [...prev, newSlide].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)));
       setSelectedSlideId(newSlideId);
@@ -2039,17 +2048,22 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
       if (currentUser) {
         const userId = typeof currentUser.uid === 'string' ? currentUser.uid : (currentUser as any).uid;
         const userEmail = typeof currentUser.email === 'string' ? currentUser.email : (currentUser as any).email;
-        await logAuditEvent({
-          presentationId,
-          userId: userId || null,
-          userEmail: userEmail || null,
-          action: shouldShare ? "SHARE_PRESENTATION" : "UPDATE_SLIDE_SET",
-          details: {
-            slideIds: slideSummary.map((slide) => slide.id),
-            count: slideSummary.length,
-            isShared: shouldShare,
-          },
-        });
+        if (!userEmail || !userEmail.includes('@')) {
+          console.error('Invalid email for Firebase Auth:', userEmail);
+          // Continue without logging audit event if email is invalid
+        } else {
+          await logAuditEvent({
+            presentationId,
+            userId: userId || null,
+            userEmail: userEmail,
+            action: shouldShare ? "SHARE_PRESENTATION" : "UPDATE_SLIDE_SET",
+            details: {
+              slideIds: slideSummary.map((slide) => slide.id),
+              count: slideSummary.length,
+              isShared: shouldShare,
+            },
+          });
+        }
       }
     } catch (error) {
       console.error("Failed to save to Firestore:", error);
@@ -2163,13 +2177,19 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
       const slideRef = doc(db, "presentations", presentationId, "slides", slideIdToDelete);
       await deleteDoc(slideRef);
       const currentUser = auth.currentUser;
-      await logAuditEvent({
-        presentationId,
-        userId: currentUser?.uid ?? null,
-        userEmail: currentUser?.email ?? null,
-        action: "DELETE_SLIDE",
-        details: { slideId: slideIdToDelete },
-      });
+      const userEmail = currentUser?.email;
+      if (!userEmail || !userEmail.includes('@')) {
+        console.error('Invalid email for Firebase Auth:', userEmail);
+        // Continue without logging audit event if email is invalid
+      } else {
+        await logAuditEvent({
+          presentationId,
+          userId: currentUser?.uid ?? null,
+          userEmail: userEmail,
+          action: "DELETE_SLIDE",
+          details: { slideId: slideIdToDelete },
+        });
+      }
     } catch (error) {
       console.error("Failed to delete slide from Firestore:", error);
       return;
@@ -2260,18 +2280,24 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
         // Log audit event
         const currentUser = auth.currentUser;
         if (currentUser) {
-          await logAuditEvent({
-            presentationId,
-            userId: currentUser.uid,
-            userEmail: currentUser.email,
-            action: "REORDER_SLIDE",
-            details: {
-              slideId: selectedSlideId,
-              direction,
-              oldIndex,
-              newIndex,
-            },
-          });
+          const userEmail = currentUser.email;
+          if (!userEmail || !userEmail.includes('@')) {
+            console.error('Invalid email for Firebase Auth:', userEmail);
+            // Continue without logging audit event if email is invalid
+          } else {
+            await logAuditEvent({
+              presentationId,
+              userId: currentUser.uid,
+              userEmail: userEmail,
+              action: "REORDER_SLIDE",
+              details: {
+                slideId: selectedSlideId,
+                direction,
+                oldIndex,
+                newIndex,
+              },
+            });
+          }
         }
       } catch (error) {
         console.error("Failed to update slide order in Firestore:", error);
@@ -2352,13 +2378,19 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
       });
       setNewComment("");
 
-      await logAuditEvent({
-        presentationId,
-        userId,
-        userEmail: currentUser?.email ?? null,
-        action: "ADD_COMMENT",
-        details: { commentId: commentRef.id },
-      });
+      const userEmail = currentUser?.email;
+      if (!userEmail || !userEmail.includes('@')) {
+        console.error('Invalid email for Firebase Auth:', userEmail);
+        // Continue without logging audit event if email is invalid
+      } else {
+        await logAuditEvent({
+          presentationId,
+          userId,
+          userEmail: userEmail,
+          action: "ADD_COMMENT",
+          details: { commentId: commentRef.id },
+        });
+      }
     } catch (error) {
       console.error("Failed to add comment to Firestore:", error);
     }
@@ -2543,16 +2575,22 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           slidesSnapshot,
         });
 
-        await logAuditEvent({
-          presentationId,
-          userId,
-          userEmail: currentUser?.email ?? null,
-          action: "SAVE_VERSION",
-          details: {
-            versionId: versionRef.id,
-            slideCount: slidesSnapshot.length,
-          },
-        });
+        const userEmail = currentUser?.email;
+        if (!userEmail || !userEmail.includes('@')) {
+          console.error('Invalid email for Firebase Auth:', userEmail);
+          // Continue without logging audit event if email is invalid
+        } else {
+          await logAuditEvent({
+            presentationId,
+            userId,
+            userEmail: userEmail,
+            action: "SAVE_VERSION",
+            details: {
+              versionId: versionRef.id,
+              slideCount: slidesSnapshot.length,
+            },
+          });
+        }
       } catch (error) {
         console.error("Failed to save presentation version:", error);
       } finally {
@@ -2631,16 +2669,23 @@ export default function EditorPage({ params }: { params: Promise<{ id: string }>
           setSelectedSlideId(firstSlideId);
         }
 
-        await logAuditEvent({
-          presentationId,
-          userId: auth.currentUser?.uid ?? null,
-          userEmail: auth.currentUser?.email ?? null,
-          action: "RESTORE_VERSION",
-          details: {
-            versionId,
+        const currentUserForAudit = auth.currentUser;
+        const userEmailForAudit = currentUserForAudit?.email;
+        if (!userEmailForAudit || !userEmailForAudit.includes('@')) {
+          console.error('Invalid email for Firebase Auth:', userEmailForAudit);
+          // Continue without logging audit event if email is invalid
+        } else {
+          await logAuditEvent({
+            presentationId,
+            userId: currentUserForAudit?.uid ?? null,
+            userEmail: userEmailForAudit,
+            action: "RESTORE_VERSION",
+            details: {
+              versionId,
             restoredSlideCount: orderedSnapshot.length,
           },
         });
+        }
       } catch (error) {
         console.error("Failed to restore version:", error);
       } finally {
